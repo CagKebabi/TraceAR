@@ -35,6 +35,17 @@ fn normalize_points(pts: &[(f64, f64)]) -> Option<(Matrix3<f64>, Vec<(f64, f64)>
 /// Normalized DLT for n >= 4 correspondences. Returns H with h33 = 1
 /// (Frobenius-normalized if h33 is degenerate).
 pub fn dlt(src: &[(f64, f64)], dst: &[(f64, f64)]) -> Option<Matrix3<f64>> {
+    dlt_impl(src, dst, None)
+}
+
+/// Weighted normalized DLT — each correspondence's equations are scaled by
+/// sqrt(weight). Used by the tracker's IRLS refinement (Huber weights).
+pub fn dlt_weighted(src: &[(f64, f64)], dst: &[(f64, f64)], weights: &[f64]) -> Option<Matrix3<f64>> {
+    assert_eq!(src.len(), weights.len());
+    dlt_impl(src, dst, Some(weights))
+}
+
+fn dlt_impl(src: &[(f64, f64)], dst: &[(f64, f64)], weights: Option<&[f64]>) -> Option<Matrix3<f64>> {
     assert_eq!(src.len(), dst.len());
     let n = src.len();
     if n < 4 {
@@ -49,18 +60,19 @@ pub fn dlt(src: &[(f64, f64)], dst: &[(f64, f64)]) -> Option<Matrix3<f64>> {
     for i in 0..n {
         let (x, y) = src_n[i];
         let (u, v) = dst_n[i];
-        a[(2 * i, 0)] = -x;
-        a[(2 * i, 1)] = -y;
-        a[(2 * i, 2)] = -1.0;
-        a[(2 * i, 6)] = u * x;
-        a[(2 * i, 7)] = u * y;
-        a[(2 * i, 8)] = u;
-        a[(2 * i + 1, 3)] = -x;
-        a[(2 * i + 1, 4)] = -y;
-        a[(2 * i + 1, 5)] = -1.0;
-        a[(2 * i + 1, 6)] = v * x;
-        a[(2 * i + 1, 7)] = v * y;
-        a[(2 * i + 1, 8)] = v;
+        let w = weights.map_or(1.0, |ws| ws[i].max(0.0).sqrt());
+        a[(2 * i, 0)] = -x * w;
+        a[(2 * i, 1)] = -y * w;
+        a[(2 * i, 2)] = -w;
+        a[(2 * i, 6)] = u * x * w;
+        a[(2 * i, 7)] = u * y * w;
+        a[(2 * i, 8)] = u * w;
+        a[(2 * i + 1, 3)] = -x * w;
+        a[(2 * i + 1, 4)] = -y * w;
+        a[(2 * i + 1, 5)] = -w;
+        a[(2 * i + 1, 6)] = v * x * w;
+        a[(2 * i + 1, 7)] = v * y * w;
+        a[(2 * i + 1, 8)] = v * w;
     }
     let svd = a.svd(false, true);
     let v_t = svd.v_t?;
@@ -120,6 +132,56 @@ fn collect_inliers(h: &Matrix3<f64>, src: &[(f64, f64)], dst: &[(f64, f64)], t2:
         }
     }
     v
+}
+
+/// Area (px^2) of the quad the marker corners map to under `h` (shoelace).
+pub fn projected_quad_area(h: &Matrix3<f64>, mw: f64, mh: f64) -> f64 {
+    let corners = [(0.0, 0.0), (mw, 0.0), (mw, mh), (0.0, mh)];
+    let proj: Vec<(f64, f64)> = corners.iter().map(|&(x, y)| project(h, x, y)).collect();
+    let mut area2 = 0.0;
+    for i in 0..4 {
+        let a = proj[i];
+        let b = proj[(i + 1) % 4];
+        area2 += a.0 * b.1 - b.0 * a.1;
+    }
+    area2.abs() / 2.0
+}
+
+/// Reject homographies that map the marker to a degenerate quad: reflected,
+/// non-convex, tiny, or crossing the plane at infinity.
+pub fn quad_sane(h: &Matrix3<f64>, mw: f64, mh: f64) -> bool {
+    let corners = [(0.0, 0.0), (mw, 0.0), (mw, mh), (0.0, mh)];
+    let mut proj = [(0.0f64, 0.0f64); 4];
+    let mut w_sign = 0.0f64;
+    for (i, &(x, y)) in corners.iter().enumerate() {
+        let p = h * Vector3::new(x, y, 1.0);
+        if !p.x.is_finite() || !p.y.is_finite() || p.z.abs() < 1e-9 {
+            return false;
+        }
+        if i == 0 {
+            w_sign = p.z.signum();
+        } else if p.z.signum() != w_sign {
+            return false; // crosses infinity — physically impossible view
+        }
+        proj[i] = (p.x / p.z, p.y / p.z);
+    }
+    // Convexity: all consecutive-edge cross products share a sign.
+    let mut sign = 0.0f64;
+    for i in 0..4 {
+        let a = proj[i];
+        let b = proj[(i + 1) % 4];
+        let c = proj[(i + 2) % 4];
+        let cross = (b.0 - a.0) * (c.1 - b.1) - (b.1 - a.1) * (c.0 - b.0);
+        if cross.abs() < 1e-9 {
+            return false;
+        }
+        if sign == 0.0 {
+            sign = cross.signum();
+        } else if cross.signum() != sign {
+            return false;
+        }
+    }
+    projected_quad_area(h, mw, mh) > 400.0 // at least ~20x20 px on screen
 }
 
 pub struct RansacResult {
@@ -264,6 +326,19 @@ mod tests {
         let err = max_transfer_error(&res.h, &h_gt, &corners);
         assert!(err < 1.0, "corner transfer error = {err}");
         assert!(res.inliers.len() >= 40, "inliers = {}", res.inliers.len());
+    }
+
+    #[test]
+    fn weighted_dlt_downweights_outlier() {
+        let h_gt = sample_h();
+        let src = grid(4, 200.0); // 16 points
+        let mut dst: Vec<_> = src.iter().map(|&(x, y)| project(&h_gt, x, y)).collect();
+        dst[5] = (dst[5].0 + 40.0, dst[5].1 - 25.0); // gross outlier
+        let mut weights = vec![1.0; src.len()];
+        weights[5] = 1e-6;
+        let h = dlt_weighted(&src, &dst, &weights).unwrap();
+        let corners = [(0.0, 0.0), (200.0, 0.0), (200.0, 200.0), (0.0, 200.0)];
+        assert!(max_transfer_error(&h, &h_gt, &corners) < 0.05);
     }
 
     #[test]

@@ -2,11 +2,11 @@
 //! marker->frame homography.
 
 use crate::features::extract_features;
-use crate::homography;
+use crate::homography::{self, quad_sane};
 use crate::image::{build_pyramid, GrayImage};
 use crate::marker::CompiledMarker;
 use crate::matcher;
-use nalgebra::{Matrix3, Vector3};
+use nalgebra::Matrix3;
 
 pub struct DetectorConfig {
     pub fast_threshold: u8,
@@ -53,50 +53,6 @@ pub struct Detection {
     pub homography: Matrix3<f64>,
     pub inliers: usize,
     pub matches: usize,
-}
-
-/// Reject homographies that map the marker to a degenerate quad: reflected,
-/// non-convex, tiny, or crossing the plane at infinity.
-fn quad_sane(h: &Matrix3<f64>, mw: f64, mh: f64) -> bool {
-    let corners = [(0.0, 0.0), (mw, 0.0), (mw, mh), (0.0, mh)];
-    let mut proj = [(0.0f64, 0.0f64); 4];
-    let mut w_sign = 0.0f64;
-    for (i, &(x, y)) in corners.iter().enumerate() {
-        let p = h * Vector3::new(x, y, 1.0);
-        if !p.x.is_finite() || !p.y.is_finite() || p.z.abs() < 1e-9 {
-            return false;
-        }
-        if i == 0 {
-            w_sign = p.z.signum();
-        } else if p.z.signum() != w_sign {
-            return false; // crosses infinity — physically impossible view
-        }
-        proj[i] = (p.x / p.z, p.y / p.z);
-    }
-    // Convexity: all consecutive-edge cross products share a sign.
-    let mut sign = 0.0f64;
-    for i in 0..4 {
-        let a = proj[i];
-        let b = proj[(i + 1) % 4];
-        let c = proj[(i + 2) % 4];
-        let cross = (b.0 - a.0) * (c.1 - b.1) - (b.1 - a.1) * (c.0 - b.0);
-        if cross.abs() < 1e-9 {
-            return false;
-        }
-        if sign == 0.0 {
-            sign = cross.signum();
-        } else if cross.signum() != sign {
-            return false;
-        }
-    }
-    // Shoelace area
-    let mut area2 = 0.0;
-    for i in 0..4 {
-        let a = proj[i];
-        let b = proj[(i + 1) % 4];
-        area2 += a.0 * b.1 - b.0 * a.1;
-    }
-    area2.abs() / 2.0 > 400.0 // at least ~20x20 px on screen
 }
 
 pub fn detect_marker(marker: &CompiledMarker, frame: &GrayImage, cfg: &DetectorConfig) -> Option<Detection> {

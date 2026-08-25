@@ -20,4 +20,6 @@ pub mod matcher;
 pub mod homography;
 pub mod marker;
 pub mod detector;
+pub mod tracker;
+pub mod pipeline;
 pub mod synthetic;

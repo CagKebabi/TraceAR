@@ -122,7 +122,8 @@ function drawQuad(e: UpdateEvent) {
   msAvg.push(e.workerMs);
   if (msAvg.length > 30) msAvg.shift();
   const avg = msAvg.reduce((a, b) => a + b, 0) / msAvg.length;
-  stats.textContent = `detect ${avg.toFixed(1)} ms · inliers ${e.inliers} / ${e.matches}`;
+  const mode = e.tracking ? "track" : "detect";
+  stats.textContent = `${mode} ${avg.toFixed(1)} ms · ${e.inliers}/${e.matches} · q ${e.quality.toFixed(2)}`;
 
   if (clearTimer !== null) clearTimeout(clearTimer);
   clearTimer = window.setTimeout(() => {

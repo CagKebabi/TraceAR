@@ -1,9 +1,9 @@
 //! WASM bindings: a thin, allocation-conscious layer over tracear-core.
 //! All heavy lifting stays in the core crate; this file only converts types.
 
-use tracear_core::detector::{detect_marker, DetectorConfig};
 use tracear_core::image::GrayImage;
 use tracear_core::marker::{compile_marker, CompileConfig, CompiledMarker};
+use tracear_core::pipeline::{MarkerStatus, Pipeline, PipelineResult};
 use wasm_bindgen::prelude::*;
 
 fn rgba_to_gray(rgba: &[u8], w: usize, h: usize) -> Result<GrayImage, JsValue> {
@@ -19,14 +19,36 @@ fn rgba_to_gray(rgba: &[u8], w: usize, h: usize) -> Result<GrayImage, JsValue> {
     Ok(GrayImage::from_vec(w, h, data))
 }
 
-/// Values per marker in the `detect_rgba` result:
-/// [found, h00,h01,h02,h10,h11,h12,h20,h21,h22, inliers, matches]
-pub const RESULT_STRIDE: usize = 12;
+/// Values per marker in a result buffer:
+/// [status (0 not found / 1 detected / 2 tracked), h00..h22, n_good, n_total, quality]
+pub const RESULT_STRIDE: usize = 13;
+
+fn encode_results(results: &[PipelineResult], out: &mut Vec<f64>) {
+    for r in results {
+        out.push(match r.status {
+            MarkerStatus::NotFound => 0.0,
+            MarkerStatus::Detected => 1.0,
+            MarkerStatus::Tracked => 2.0,
+        });
+        match &r.homography {
+            Some(h) => {
+                for row in 0..3 {
+                    for col in 0..3 {
+                        out.push(h[(row, col)]);
+                    }
+                }
+            }
+            None => out.extend_from_slice(&[0.0; 9]),
+        }
+        out.push(r.n_good as f64);
+        out.push(r.n_total as f64);
+        out.push(r.quality as f64);
+    }
+}
 
 #[wasm_bindgen]
 pub struct Engine {
-    markers: Vec<CompiledMarker>,
-    cfg: DetectorConfig,
+    pipeline: Pipeline,
 }
 
 impl Default for Engine {
@@ -39,49 +61,49 @@ impl Default for Engine {
 impl Engine {
     #[wasm_bindgen(constructor)]
     pub fn new() -> Engine {
-        Engine { markers: Vec::new(), cfg: DetectorConfig::default() }
+        Engine { pipeline: Pipeline::new() }
     }
 
     /// Add a compiled `.tracear` marker; returns its index.
     pub fn add_marker(&mut self, bytes: &[u8]) -> Result<u32, JsValue> {
         let m = CompiledMarker::from_bytes(bytes).map_err(|e| JsValue::from_str(&e))?;
-        self.markers.push(m);
-        Ok((self.markers.len() - 1) as u32)
+        Ok(self.pipeline.add_marker(m) as u32)
     }
 
     pub fn marker_count(&self) -> u32 {
-        self.markers.len() as u32
+        self.pipeline.marker_count() as u32
     }
 
     /// Marker native size as [width, height] for overlay drawing.
     pub fn marker_size(&self, index: u32) -> Vec<u32> {
-        match self.markers.get(index as usize) {
+        match self.pipeline.marker(index as usize) {
             Some(m) => vec![m.width, m.height],
             None => vec![],
         }
     }
 
-    /// Run detection for every added marker on an RGBA frame.
+    /// Drop all tracking state (e.g. when the camera stops).
+    pub fn reset(&mut self) {
+        self.pipeline.reset();
+    }
+
+    /// Stateful detect<->track processing of a live RGBA frame.
     /// Returns RESULT_STRIDE f64 values per marker (see constant above);
     /// homographies map marker px -> frame px.
+    pub fn process_rgba(&mut self, rgba: &[u8], width: u32, height: u32) -> Result<Vec<f64>, JsValue> {
+        let gray = rgba_to_gray(rgba, width as usize, height as usize)?;
+        let results = self.pipeline.process(&gray);
+        let mut out = Vec::with_capacity(results.len() * RESULT_STRIDE);
+        encode_results(&results, &mut out);
+        Ok(out)
+    }
+
+    /// Stateless one-shot detection (detectImage API). Same result layout.
     pub fn detect_rgba(&self, rgba: &[u8], width: u32, height: u32) -> Result<Vec<f64>, JsValue> {
         let gray = rgba_to_gray(rgba, width as usize, height as usize)?;
-        let mut out = Vec::with_capacity(self.markers.len() * RESULT_STRIDE);
-        for m in &self.markers {
-            match detect_marker(m, &gray, &self.cfg) {
-                Some(d) => {
-                    out.push(1.0);
-                    for r in 0..3 {
-                        for c in 0..3 {
-                            out.push(d.homography[(r, c)]);
-                        }
-                    }
-                    out.push(d.inliers as f64);
-                    out.push(d.matches as f64);
-                }
-                None => out.extend_from_slice(&[0.0; RESULT_STRIDE]),
-            }
-        }
+        let results = self.pipeline.detect_only(&gray);
+        let mut out = Vec::with_capacity(results.len() * RESULT_STRIDE);
+        encode_results(&results, &mut out);
         Ok(out)
     }
 }

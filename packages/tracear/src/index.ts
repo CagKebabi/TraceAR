@@ -10,8 +10,9 @@ import type { ReadyMessage, ResultMessage, ErrorMessage } from "./worker";
 
 export type Homography = Float64Array;
 
-/** Values per marker in a worker result (mirrors the wasm crate). */
-const RESULT_STRIDE = 12;
+/** Values per marker in a worker result (mirrors the wasm crate):
+ * [status (0/1/2), h00..h22, nGood, nTotal, quality] */
+const RESULT_STRIDE = 13;
 
 export interface TracearConfig {
   /** Element the managed <video> is appended to; position it yourself (e.g. relative). */
@@ -32,15 +33,20 @@ export interface UpdateEvent {
   homography: Homography;
   markerWidth: number;
   markerHeight: number;
+  /** True when this pose came from the sub-pixel tracker; false when it came
+   * from full detection (first acquire / re-acquire / detectImage). */
+  tracking: boolean;
+  /** Detection frames: RANSAC inliers. Tracking frames: surviving patches. */
   inliers: number;
+  /** Detection frames: total matches. Tracking frames: attempted patches. */
   matches: number;
-  /** Rough 0..1 confidence from inlier count (placeholder until M2 tracking). */
+  /** 0..1 confidence (patch survival x NCC while tracking). */
   quality: number;
   /** Frame capture time (performance.now() domain). */
   timestamp: number;
   processWidth: number;
   processHeight: number;
-  /** Detection time inside the worker (ms). */
+  /** Processing time inside the worker (ms). */
   workerMs: number;
 }
 
@@ -228,27 +234,8 @@ export class Tracear {
       );
     });
     const out: (UpdateEvent | null)[] = [];
-    const d = result.data;
     for (let i = 0; i < this.targets.length; i++) {
-      const base = i * RESULT_STRIDE;
-      if (d[base] !== 1.0) {
-        out.push(null);
-        continue;
-      }
-      const inliers = d[base + 10];
-      out.push({
-        index: i,
-        homography: d.slice(base + 1, base + 10),
-        markerWidth: this.targets[i].width,
-        markerHeight: this.targets[i].height,
-        inliers,
-        matches: d[base + 11],
-        quality: Math.min(1, inliers / 40),
-        timestamp: result.timestamp,
-        processWidth: result.width,
-        processHeight: result.height,
-        workerMs: result.ms,
-      });
+      out.push(this.parseUpdate(result, i));
     }
     return out;
   }
@@ -283,33 +270,40 @@ export class Tracear {
     this.scheduleFrame();
   }
 
+  private parseUpdate(msg: ResultMessage, index: number): UpdateEvent | null {
+    const d = msg.data;
+    const base = index * RESULT_STRIDE;
+    const status = d[base];
+    if (status === 0) return null;
+    const state = this.targets[index];
+    return {
+      index,
+      homography: d.slice(base + 1, base + 10),
+      markerWidth: state.width,
+      markerHeight: state.height,
+      tracking: status === 2,
+      inliers: d[base + 10],
+      matches: d[base + 11],
+      quality: d[base + 12],
+      timestamp: msg.timestamp,
+      processWidth: msg.width,
+      processHeight: msg.height,
+      workerMs: msg.ms,
+    };
+  }
+
   private onResult(msg: ResultMessage): void {
     this.inflight = false;
-    const d = msg.data;
     for (let i = 0; i < this.targets.length; i++) {
-      const base = i * RESULT_STRIDE;
       const state = this.targets[i];
-      const found = d[base] === 1.0;
-      if (found) {
+      const update = this.parseUpdate(msg, i);
+      if (update) {
         state.misses = 0;
         if (!state.found) {
           state.found = true;
           this.emitter.emit("targetFound", { index: i });
         }
-        const inliers = d[base + 10];
-        this.emitter.emit("update", {
-          index: i,
-          homography: d.slice(base + 1, base + 10),
-          markerWidth: state.width,
-          markerHeight: state.height,
-          inliers,
-          matches: d[base + 11],
-          quality: Math.min(1, inliers / 40),
-          timestamp: msg.timestamp,
-          processWidth: msg.width,
-          processHeight: msg.height,
-          workerMs: msg.ms,
-        });
+        this.emitter.emit("update", update);
       } else if (state.found) {
         state.misses++;
         if (state.misses >= this.config.lostAfterMisses) {

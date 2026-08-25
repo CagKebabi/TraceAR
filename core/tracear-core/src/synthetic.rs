@@ -1,7 +1,9 @@
 //! Deterministic synthetic image generation for tests and the bench harness.
 
+use crate::homography::dlt;
 use crate::image::GrayImage;
 use crate::rng::XorShift64;
+use nalgebra::Matrix3;
 
 /// Corner-rich texture: overlapping random rectangles on a mid-gray base.
 pub fn textured_image(w: usize, h: usize, seed: u64) -> GrayImage {
@@ -48,6 +50,44 @@ pub fn brightness_contrast(img: &mut GrayImage, alpha: f64, beta: f64) {
     for p in img.data.iter_mut() {
         *p = ((*p as f64) * alpha + beta).round().clamp(0.0, 255.0) as u8;
     }
+}
+
+/// Scripted smooth camera trajectory for tracking benches: the marker sweeps
+/// through translation, in-plane rotation, scale, and mild perspective as `t`
+/// goes 0..1. Pure function of its inputs — a sequence is exactly repeatable.
+/// Returns the marker(level-0 px) -> frame px homography.
+pub fn trajectory_homography(
+    marker_w: f64,
+    marker_h: f64,
+    frame_w: f64,
+    frame_h: f64,
+    t: f64,
+) -> Matrix3<f64> {
+    use std::f64::consts::TAU;
+    let cx = frame_w / 2.0 + (TAU * t * 2.0).sin() * frame_w * 0.13;
+    let cy = frame_h / 2.0 + (TAU * t * 3.0).cos() * frame_h * 0.09;
+    let rot = (TAU * t * 1.5).sin() * 0.35; // +-20 deg in-plane
+    let scale = (0.62 + (TAU * t).sin() * 0.12) * frame_h.min(frame_w) / marker_w.max(marker_h);
+    let keystone = (TAU * t * 0.7).sin() * 0.10; // mild out-of-plane tilt
+    let (sr, cr) = rot.sin_cos();
+    let src = [
+        (0.0, 0.0),
+        (marker_w, 0.0),
+        (marker_w, marker_h),
+        (0.0, marker_h),
+    ];
+    let quad: Vec<(f64, f64)> = src
+        .iter()
+        .map(|&(mx, my)| {
+            let x = (mx - marker_w / 2.0) * scale;
+            let y = (my - marker_h / 2.0) * scale;
+            let (rx, ry) = (cr * x - sr * y, sr * x + cr * y);
+            // keystone: horizontal stretch varying with vertical position
+            let k = 1.0 + keystone * ry / (marker_h * scale / 2.0).max(1.0);
+            (cx + rx * k, cy + ry)
+        })
+        .collect();
+    dlt(&src, &quad).expect("trajectory homography")
 }
 
 #[cfg(test)]

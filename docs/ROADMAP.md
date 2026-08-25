@@ -15,7 +15,7 @@ compiled marker is found in a warped+noisy+brightness-shifted scene with mean
 corner error < 3 px; no false positive on a marker-free scene; works at
 down-scale ≈ 0.4× and moderate perspective tilt.
 
-## M1 — WASM bridge + camera + 2D overlay demo  🟡 code done, device test pending
+## M1 — WASM bridge + camera + 2D overlay demo  ✅ done (2026-08-26)
 
 `tracear-wasm` bindings crate (wasm-bindgen), `.tracear` binary format +
 in-browser compiler (`tracear/compiler`; the Node CLI moved to M5), TS
@@ -25,18 +25,22 @@ First run on real phones (Android Chrome + iOS Safari).
 
 **Accept:** demo detects a printed/on-screen marker live on both platforms;
 worker detection < 60 ms/frame on desktop (perf tuning comes later, M4).
-Status: browser self-test passes (rotated marker in noisy scene: 47 ms,
-162 inliers, 0.5 px center error on desktop Chrome); phone test pending.
+Status: browser self-test 47 ms / 162 inliers / 0.5 px on desktop Chrome;
+phone test passed — stable quad lock at 37-39 ms/frame on device.
 
-## M2 — Frame-to-frame tracking
+## M2 — Frame-to-frame tracking  ✅ done (2026-08-26)
 
-Tracking patches in the compiled marker, pyramidal inverse-compositional LK,
-NCC validation, IRLS homography update, track-quality logic,
-detect↔track state machine.
+Tracking patches in the compiled marker (21x21 templates at factor-2 levels,
+.tracear v2), translation-only inverse-compositional LK on re-warped
+templates, NCC validation, Huber-IRLS homography update, track-quality
+logic, detect↔track state machine (`pipeline.rs`).
 
 **Accept (bench, synthetic):** static-camera jitter < 0.3 px before filtering;
 tracking survives a 500-frame moderate-motion synthetic sequence with < 2
-losses; tracking step < 5× faster than detection step.
+losses; tracking step ≥ 5× faster than detection step.
+Measured (`cargo run --release --example bench_track`): static jitter
+**0.019 px**; motion **0 losses**, 499/500 tracked, 0.05 px mean corner
+error; track 3.45 ms vs detect 33.9 ms = **9.8×**. All targets exceeded.
 
 ## M3 — Pose, filtering, three.js
 

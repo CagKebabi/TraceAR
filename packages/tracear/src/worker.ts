@@ -64,7 +64,13 @@ self.onmessage = async (ev: MessageEvent<InitMessage | FrameMessage>) => {
     } else if (msg.type === "frame") {
       if (!engine) return;
       const t0 = performance.now();
-      const data = engine.detect_rgba(new Uint8Array(msg.buf), msg.width, msg.height);
+      // Live frames run the stateful detect<->track pipeline; one-shot
+      // requests (detectImage) must not disturb tracking state.
+      const px = new Uint8Array(msg.buf);
+      const data =
+        msg.requestId !== undefined
+          ? engine.detect_rgba(px, msg.width, msg.height)
+          : engine.process_rgba(px, msg.width, msg.height);
       const ms = performance.now() - t0;
       post(
         {
