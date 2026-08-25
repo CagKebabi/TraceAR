@@ -1,0 +1,203 @@
+import { Tracear, type UpdateEvent } from "tracear";
+import { compileImage } from "tracear/compiler";
+
+const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+
+const btnSample = $<HTMLButtonElement>("btn-sample");
+const fileInput = $<HTMLInputElement>("file-input");
+const markerStatus = $<HTMLParagraphElement>("marker-status");
+const markerPanel = $<HTMLDivElement>("marker-panel");
+const markerPreview = $<HTMLCanvasElement>("marker-preview");
+const downloadLink = $<HTMLAnchorElement>("download-link");
+const btnStart = $<HTMLButtonElement>("btn-start");
+const btnSelfTest = $<HTMLButtonElement>("btn-selftest");
+const stats = $<HTMLSpanElement>("stats");
+const container = $<HTMLDivElement>("ar-container");
+const overlay = $<HTMLCanvasElement>("overlay");
+
+let markerBytes: Uint8Array | null = null;
+let markerSource: CanvasImageSource | null = null;
+let tracker: Tracear | null = null;
+let clearTimer: number | null = null;
+
+/** Deterministic corner-rich pattern — same idea as the core's synthetic texture. */
+function drawSampleMarker(size = 512): HTMLCanvasElement {
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  const ctx = c.getContext("2d")!;
+  let seed = 0x12345678;
+  const rnd = () => {
+    seed ^= seed << 13;
+    seed ^= seed >>> 17;
+    seed ^= seed << 5;
+    return ((seed >>> 0) % 100000) / 100000;
+  };
+  ctx.fillStyle = "#808080";
+  ctx.fillRect(0, 0, size, size);
+  for (let i = 0; i < 240; i++) {
+    const w = 14 + rnd() * 60;
+    const h = 14 + rnd() * 60;
+    const x = rnd() * (size - w);
+    const y = rnd() * (size - h);
+    const v = Math.floor(35 + rnd() * 195);
+    ctx.fillStyle = `rgb(${v},${v},${v})`;
+    ctx.fillRect(x, y, w, h);
+  }
+  // White quiet border helps printing and framing.
+  ctx.strokeStyle = "white";
+  ctx.lineWidth = 16;
+  ctx.strokeRect(8, 8, size - 16, size - 16);
+  return c;
+}
+
+async function setMarker(source: CanvasImageSource & ImageBitmapSource, label: string) {
+  markerStatus.textContent = "Compiling marker…";
+  try {
+    const res = await compileImage(source);
+    markerBytes = res.data;
+    markerSource = source;
+    tracker?.dispose();
+    tracker = null;
+    markerStatus.textContent = `${label}: ${res.featureCount} features, ${(res.data.length / 1024).toFixed(1)} KB (${res.width}x${res.height})`;
+    const pctx = markerPreview.getContext("2d")!;
+    pctx.clearRect(0, 0, markerPreview.width, markerPreview.height);
+    pctx.drawImage(source, 0, 0, markerPreview.width, markerPreview.height);
+    if (source instanceof HTMLCanvasElement) {
+      downloadLink.href = source.toDataURL("image/png");
+      downloadLink.hidden = false;
+    } else {
+      downloadLink.hidden = true;
+    }
+    markerPanel.hidden = false;
+    btnStart.disabled = false;
+    btnSelfTest.disabled = false;
+  } catch (e) {
+    markerStatus.textContent = `Compile failed: ${e instanceof Error ? e.message : e}`;
+  }
+}
+
+btnSample.onclick = () => setMarker(drawSampleMarker(), "Sample marker");
+
+fileInput.onchange = async () => {
+  const f = fileInput.files?.[0];
+  if (!f) return;
+  const bmp = await createImageBitmap(f);
+  await setMarker(bmp, f.name);
+};
+
+function applyH(h: Float64Array, x: number, y: number): [number, number] {
+  const w = h[6] * x + h[7] * y + h[8];
+  return [(h[0] * x + h[1] * y + h[2]) / w, (h[3] * x + h[4] * y + h[5]) / w];
+}
+
+const msAvg: number[] = [];
+
+function drawQuad(e: UpdateEvent) {
+  overlay.width = e.processWidth;
+  overlay.height = e.processHeight;
+  const ctx = overlay.getContext("2d")!;
+  ctx.clearRect(0, 0, overlay.width, overlay.height);
+  const mw = e.markerWidth;
+  const mh = e.markerHeight;
+  const corners = [
+    applyH(e.homography, 0, 0),
+    applyH(e.homography, mw, 0),
+    applyH(e.homography, mw, mh),
+    applyH(e.homography, 0, mh),
+  ];
+  ctx.beginPath();
+  ctx.moveTo(corners[0][0], corners[0][1]);
+  for (let i = 1; i < 4; i++) ctx.lineTo(corners[i][0], corners[i][1]);
+  ctx.closePath();
+  ctx.strokeStyle = "#39d98a";
+  ctx.lineWidth = 3;
+  ctx.stroke();
+  // Top-edge accent shows orientation.
+  ctx.beginPath();
+  ctx.moveTo(corners[0][0], corners[0][1]);
+  ctx.lineTo(corners[1][0], corners[1][1]);
+  ctx.strokeStyle = "#ff5c7a";
+  ctx.stroke();
+
+  msAvg.push(e.workerMs);
+  if (msAvg.length > 30) msAvg.shift();
+  const avg = msAvg.reduce((a, b) => a + b, 0) / msAvg.length;
+  stats.textContent = `detect ${avg.toFixed(1)} ms · inliers ${e.inliers} / ${e.matches}`;
+
+  if (clearTimer !== null) clearTimeout(clearTimer);
+  clearTimer = window.setTimeout(() => {
+    ctx.clearRect(0, 0, overlay.width, overlay.height);
+  }, 400);
+}
+
+/**
+ * End-to-end pipeline check without a camera: render the marker into a fake
+ * "camera frame" (rotated + scaled on a noisy background), run one-shot
+ * detection through the same worker the live path uses, and overlay the
+ * result. Marker center is placed at a known point so the result can be
+ * sanity-checked numerically, too.
+ */
+btnSelfTest.onclick = async () => {
+  if (!markerBytes) return;
+  btnSelfTest.disabled = true;
+  stats.textContent = "self test running…";
+  try {
+    const scene = document.createElement("canvas");
+    scene.width = 640;
+    scene.height = 480;
+    const ctx = scene.getContext("2d")!;
+    // noisy background
+    ctx.fillStyle = "#666";
+    ctx.fillRect(0, 0, 640, 480);
+    for (let i = 0; i < 300; i++) {
+      const v = Math.floor(Math.random() * 255);
+      ctx.fillStyle = `rgb(${v},${v},${v})`;
+      ctx.fillRect(Math.random() * 620, Math.random() * 460, 4 + Math.random() * 24, 4 + Math.random() * 24);
+    }
+    // marker at center, rotated 25deg, ~280px on screen
+    ctx.save();
+    ctx.translate(320, 240);
+    ctx.rotate((25 * Math.PI) / 180);
+    ctx.drawImage(markerSource!, -140, -140, 280, 280);
+    ctx.restore();
+
+    const t = tracker ?? (tracker = await Tracear.create({ container, targets: [markerBytes] }));
+    const results = await t.detectImage(scene);
+    const r = results[0];
+    if (!r) {
+      stats.textContent = "self test: marker NOT found";
+      return;
+    }
+    // center of marker should land near scene center (scaled to process size)
+    const [cx, cy] = applyH(r.homography, r.markerWidth / 2, r.markerHeight / 2);
+    const sx = r.processWidth / 640;
+    const err = Math.hypot(cx - 320 * sx, cy - 240 * sx);
+    drawQuad(r);
+    stats.textContent =
+      `self test OK · ${r.workerMs.toFixed(1)} ms · inliers ${r.inliers}/${r.matches} · center err ${err.toFixed(1)} px`;
+  } catch (e) {
+    stats.textContent = `self test failed: ${e instanceof Error ? e.message : e}`;
+  } finally {
+    btnSelfTest.disabled = false;
+  }
+};
+
+btnStart.onclick = async () => {
+  if (!markerBytes) return;
+  btnStart.disabled = true;
+  btnStart.textContent = "Starting…";
+  try {
+    tracker = tracker ?? (await Tracear.create({ container, targets: [markerBytes] }));
+    tracker.on("update", drawQuad);
+    tracker.on("targetFound", () => (stats.textContent = "target found"));
+    tracker.on("targetLost", () => (stats.textContent = "target lost — searching…"));
+    tracker.on("error", ({ message }) => (stats.textContent = `error: ${message}`));
+    await tracker.start();
+    btnStart.textContent = "Camera running";
+    stats.textContent = "searching for marker…";
+  } catch (e) {
+    btnStart.disabled = false;
+    btnStart.textContent = "Start camera";
+    stats.textContent = `camera failed: ${e instanceof Error ? e.message : e}`;
+  }
+};

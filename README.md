@@ -49,6 +49,17 @@ cd core
 cargo test
 ```
 
+Demo (requires [Rust](https://rustup.rs) + [wasm-pack](https://rustwasm.github.io/wasm-pack/) + Node 20):
+
+```sh
+npm install
+npm run build:wasm   # Rust core -> packages/tracear/wasm
+npm run demo         # HTTPS dev server; open it from your phone on the same LAN
+```
+
+In the demo: generate (or upload) a marker, then either point the camera at it
+or hit **Self test** to run the full detection pipeline on a synthetic frame.
+
 ## License
 
 MIT — see [LICENSE](./LICENSE).

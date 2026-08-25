@@ -4,7 +4,7 @@ Each milestone has acceptance criteria; a milestone is done when its criteria
 are met by tests/bench, not by eyeballing. (Device checks are the exception —
 they need a human with a phone.)
 
-## M0 — Repo + detection core (native Rust)  ← current
+## M0 — Repo + detection core (native Rust)  ✅ done (2026-08-26)
 
 Scaffold, docs, and the full detection pipeline as pure Rust with tests:
 image/pyramid, FAST-9, orientation, steered BRIEF, Hamming matcher,
@@ -15,15 +15,18 @@ compiled marker is found in a warped+noisy+brightness-shifted scene with mean
 corner error < 3 px; no false positive on a marker-free scene; works at
 down-scale ≈ 0.4× and moderate perspective tilt.
 
-## M1 — WASM bridge + camera + 2D overlay demo
+## M1 — WASM bridge + camera + 2D overlay demo  🟡 code done, device test pending
 
 `tracear-wasm` bindings crate (wasm-bindgen), `.tracear` binary format +
-compiler CLI, TS package skeleton wired to a worker, camera capture,
+in-browser compiler (`tracear/compiler`; the Node CLI moved to M5), TS
+package wired to a worker, camera capture, `detectImage()` one-shot API,
 and a demo page drawing the detected quad over the video (no 3D yet).
 First run on real phones (Android Chrome + iOS Safari).
 
 **Accept:** demo detects a printed/on-screen marker live on both platforms;
 worker detection < 60 ms/frame on desktop (perf tuning comes later, M4).
+Status: browser self-test passes (rotated marker in noisy scene: 47 ms,
+162 inliers, 0.5 px center error on desktop Chrome); phone test pending.
 
 ## M2 — Frame-to-frame tracking
 

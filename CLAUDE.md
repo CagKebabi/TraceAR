@@ -11,7 +11,14 @@ Goal: beat MindAR on jitter + performance on mobile web (Android Chrome, iOS Saf
 - Rust is installed for the current user (GNU host toolchain, no MSVC on this machine).
   If `cargo` is not on PATH in a shell, prepend: `$env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"`.
 - Core tests: `cd core; cargo test` (pure Rust, no browser needed).
-- wasm target installed: `wasm32-unknown-unknown`.
+- wasm target installed: `wasm32-unknown-unknown`; `wasm-pack` lives in `~\.cargo\bin`.
+- `npm run build:wasm` → builds `packages/tracear/wasm/` (gitignored build artifact;
+  required after a fresh clone and after any core change).
+- `npm run demo` → HTTPS dev server (self-signed, for phone testing over LAN).
+  For local desktop work set `NO_SSL=1` first — localhost is a secure context on
+  plain HTTP, so no cert warning.
+- Demo has a "Self test (no camera)" button: full worker+WASM detection on a
+  synthetic scene — use it to verify the pipeline without a camera.
 
 ## Conventions (do not break)
 

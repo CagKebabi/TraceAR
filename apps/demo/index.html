@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tracear demo</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Tracear <span class="tag">M1 · detection demo</span></h1>
+
+      <section class="card" id="setup">
+        <h2>1 · Marker</h2>
+        <div class="row">
+          <button id="btn-sample">Generate sample marker</button>
+          <label class="file-label">
+            or use your own image
+            <input type="file" id="file-input" accept="image/*" />
+          </label>
+        </div>
+        <p id="marker-status" class="muted">No marker compiled yet.</p>
+        <div id="marker-panel" hidden>
+          <canvas id="marker-preview" width="200" height="200"></canvas>
+          <p class="muted">
+            Show this marker to the camera from another screen, or
+            <a id="download-link" download="tracear-marker.png">download the PNG</a> and print it.
+          </p>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>2 · Track</h2>
+        <div class="row">
+          <button id="btn-start" disabled>Start camera</button>
+          <button id="btn-selftest" class="secondary" disabled>Self test (no camera)</button>
+          <span id="stats" class="muted"></span>
+        </div>
+        <div id="ar-container">
+          <canvas id="overlay"></canvas>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

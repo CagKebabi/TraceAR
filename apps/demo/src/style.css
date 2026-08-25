@@ -1,0 +1,127 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, sans-serif;
+  background: #0f1115;
+  color: #e6e8ec;
+}
+
+main {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+h1 {
+  font-size: 1.4rem;
+}
+
+.tag {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #7dd3a8;
+  border: 1px solid #2b4a3a;
+  border-radius: 999px;
+  padding: 2px 10px;
+  vertical-align: middle;
+}
+
+.card {
+  background: #171a21;
+  border: 1px solid #262b36;
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+
+.card h2 {
+  font-size: 1rem;
+  margin: 0 0 10px;
+}
+
+.row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+button {
+  background: #2a6df4;
+  border: none;
+  color: white;
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+button:disabled {
+  background: #333a48;
+  color: #7a8194;
+  cursor: not-allowed;
+}
+
+button.secondary {
+  background: #2c3242;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+.file-label {
+  font-size: 0.85rem;
+  color: #aab1c0;
+}
+
+.muted {
+  color: #8a91a3;
+  font-size: 0.85rem;
+}
+
+#marker-preview {
+  width: 160px;
+  height: 160px;
+  image-rendering: pixelated;
+  border: 1px solid #262b36;
+  border-radius: 8px;
+  background: white;
+}
+
+#marker-panel {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  margin-top: 10px;
+}
+
+#ar-container {
+  position: relative;
+  margin-top: 12px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #000;
+  min-height: 60px;
+}
+
+#ar-container video {
+  width: 100%;
+  display: block;
+}
+
+#overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  pointer-events: none;
+}
+
+a {
+  color: #7ab3ff;
+}
