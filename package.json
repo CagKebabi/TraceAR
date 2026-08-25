@@ -1,0 +1,14 @@
+{
+  "name": "tracear-monorepo",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Monorepo for Tracear — high-performance web image tracking engine",
+  "workspaces": [
+    "packages/*",
+    "bench"
+  ],
+  "scripts": {
+    "test:core": "cd core && cargo test"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,20 @@
+# Node
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Rust
+target/
+Cargo.lock.bak
+
+# WASM build output
+pkg/
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+*.log
+
+# Bench artifacts (generated datasets, reports)
+bench/out/
+bench/datasets/generated/

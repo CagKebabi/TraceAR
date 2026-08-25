@@ -1,0 +1,17 @@
+{
+  "name": "tracear",
+  "version": "0.0.0",
+  "description": "High-performance, jitter-free image tracking for the mobile web (WASM+SIMD engine)",
+  "type": "module",
+  "license": "MIT",
+  "keywords": ["ar", "webar", "image-tracking", "augmented-reality", "wasm", "computer-vision"],
+  "exports": {
+    ".": "./src/index.ts",
+    "./three": "./src/three.ts",
+    "./compiler": "./src/compiler.ts"
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "echo 'build wiring lands in M1 (wasm-pack + tsup)'"
+  }
+}
