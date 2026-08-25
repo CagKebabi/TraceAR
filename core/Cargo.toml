@@ -1,5 +1,5 @@
 [workspace]
-members = ["tracear-core"]
+members = ["tracear-core", "tracear-wasm"]
 resolver = "2"
 
 [profile.release]
