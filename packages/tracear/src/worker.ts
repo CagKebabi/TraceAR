@@ -1,0 +1,85 @@
+/// <reference lib="webworker" />
+/**
+ * Detection worker: owns the WASM engine so the main thread never blocks on
+ * CV work. Frames arrive as transferred RGBA buffers; results go back as a
+ * transferred Float64Array (RESULT_STRIDE values per marker, see wasm crate).
+ */
+import init, { Engine } from "../wasm/tracear_wasm.js";
+
+export interface InitMessage {
+  type: "init";
+  markers: ArrayBuffer[];
+}
+
+export interface FrameMessage {
+  type: "frame";
+  buf: ArrayBuffer;
+  width: number;
+  height: number;
+  timestamp: number;
+  /** Set for one-shot detectImage() calls; echoed back in the result. */
+  requestId?: number;
+}
+
+export interface ReadyMessage {
+  type: "ready";
+  /** [width, height] per added marker. */
+  markerSizes: [number, number][];
+}
+
+export interface ResultMessage {
+  type: "result";
+  /** RESULT_STRIDE (12) f64 per marker: [found, h x 9, inliers, matches]. */
+  data: Float64Array;
+  ms: number;
+  timestamp: number;
+  width: number;
+  height: number;
+  requestId?: number;
+}
+
+export interface ErrorMessage {
+  type: "error";
+  message: string;
+}
+
+const post = (msg: ReadyMessage | ResultMessage | ErrorMessage, transfer: Transferable[] = []) =>
+  (self as unknown as Worker).postMessage(msg, transfer);
+
+let engine: Engine | null = null;
+
+self.onmessage = async (ev: MessageEvent<InitMessage | FrameMessage>) => {
+  const msg = ev.data;
+  try {
+    if (msg.type === "init") {
+      await init();
+      engine = new Engine();
+      const markerSizes: [number, number][] = [];
+      for (const m of msg.markers) {
+        const idx = engine.add_marker(new Uint8Array(m));
+        const size = engine.marker_size(idx);
+        markerSizes.push([size[0], size[1]]);
+      }
+      post({ type: "ready", markerSizes });
+    } else if (msg.type === "frame") {
+      if (!engine) return;
+      const t0 = performance.now();
+      const data = engine.detect_rgba(new Uint8Array(msg.buf), msg.width, msg.height);
+      const ms = performance.now() - t0;
+      post(
+        {
+          type: "result",
+          data,
+          ms,
+          timestamp: msg.timestamp,
+          width: msg.width,
+          height: msg.height,
+          requestId: msg.requestId,
+        },
+        [data.buffer],
+      );
+    }
+  } catch (e) {
+    post({ type: "error", message: e instanceof Error ? e.message : String(e) });
+  }
+};

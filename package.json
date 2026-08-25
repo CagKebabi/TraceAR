@@ -5,10 +5,13 @@
   "description": "Monorepo for Tracear — high-performance web image tracking engine",
   "workspaces": [
     "packages/*",
+    "apps/*",
     "bench"
   ],
   "scripts": {
-    "test:core": "cd core && cargo test"
+    "test:core": "cd core && cargo test",
+    "build:wasm": "wasm-pack build core/tracear-wasm --release --target web --no-pack --out-dir ../../packages/tracear/wasm",
+    "demo": "npm run dev --workspace tracear-demo"
   },
   "license": "MIT"
 }
