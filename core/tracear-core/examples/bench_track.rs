@@ -45,7 +45,7 @@ fn main() {
     for f in 0..100u64 {
         let frame = render(&marker_img, &bg, &h_gt, 1000 + f);
         let t0 = Instant::now();
-        let res = &pipeline.process(&frame)[0];
+        let res = &pipeline.process(&frame, f as f64 * 33.0)[0];
         let ms = t0.elapsed().as_secs_f64() * 1e3;
         if res.status == MarkerStatus::Tracked {
             tracked.push(corners(&res.homography.unwrap()));
@@ -74,7 +74,7 @@ fn main() {
         let t = f as f64 / 500.0;
         let h_gt = synthetic::trajectory_homography(320.0, 320.0, 640.0, 480.0, t);
         let frame = render(&marker_img, &bg, &h_gt, 5000 + f);
-        let res = &pipeline.process(&frame)[0];
+        let res = &pipeline.process(&frame, f as f64 * 33.0)[0];
         match res.status {
             MarkerStatus::Tracked => {
                 was_tracking = true;
@@ -107,9 +107,9 @@ fn main() {
     pipeline.reset();
     let t0 = Instant::now();
     let reps = 20;
-    for _ in 0..reps {
+    for r in 0..reps {
         pipeline.reset(); // force full detection every iteration
-        let _ = pipeline.process(&frame);
+        let _ = pipeline.process(&frame, r as f64 * 33.0);
     }
     let mean_detect = t0.elapsed().as_secs_f64() * 1e3 / reps as f64;
     println!(

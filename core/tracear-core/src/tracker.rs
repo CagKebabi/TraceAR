@@ -47,14 +47,16 @@ impl Default for TrackerConfig {
         Self {
             max_patches: 40,
             half_window: 4,
-            presearch_radius: 4,
+            // Generous: only paid on the single hand-off frame after detection,
+            // where handheld motion accumulated over a slow detection frame.
+            presearch_radius: 8,
             presearch_step: 2,
-            lk_max_iters: 8,
+            lk_max_iters: 10,
             lk_epsilon: 0.02,
-            max_displacement: 10.0,
-            min_ncc: 0.65,
+            max_displacement: 14.0,
+            min_ncc: 0.60,
             min_patches: 12,
-            min_survival: 0.45,
+            min_survival: 0.35,
             irls_iters: 3,
             huber_px: 1.5,
             max_corner_jump_px: 80.0,
@@ -67,12 +69,16 @@ pub struct TrackState {
     pub h: Matrix3<f64>,
     /// Previous frame's homography (for constant-velocity prediction).
     pub h_prev: Option<Matrix3<f64>>,
+    /// Capture timestamp (ms) of the frame `h` came from.
+    pub t_last: f64,
+    /// Capture timestamp (ms) of the frame `h_prev` came from.
+    pub t_prev: f64,
     pub frames_tracked: u64,
 }
 
 impl TrackState {
-    pub fn new(h: Matrix3<f64>) -> Self {
-        Self { h, h_prev: None, frames_tracked: 0 }
+    pub fn new(h: Matrix3<f64>, t: f64) -> Self {
+        Self { h, h_prev: None, t_last: t, t_prev: t, frames_tracked: 0 }
     }
 }
 
@@ -170,6 +176,13 @@ fn warp_template(
             gy.push((raw[(r + 1) * side + c] - raw[(r - 1) * side + c]) * 0.5);
         }
     }
+    // Zero-mean the template: with the frame window zero-meaned per iteration
+    // too, LK becomes invariant to the brightness offsets a phone camera's
+    // auto-exposure introduces between frames. (Gradients are unaffected.)
+    let mean = template.iter().sum::<f32>() / template.len() as f32;
+    for v in template.iter_mut() {
+        *v -= mean;
+    }
     Some(WarpedPatch { marker_pos: (patch.x as f64, patch.y as f64), pred, template, gx, gy })
 }
 
@@ -189,10 +202,16 @@ fn sample_frame_window(frame: &GrayImage, px: f32, py: f32, hw: i32, out: &mut V
     true
 }
 
+/// `pred_scale` rescales the constant-velocity prediction to the actual time
+/// gap: (t_now - t_last) / (t_last - t_prev). Camera frames do NOT arrive
+/// uniformly — a detection frame takes ~5x longer than a tracking frame, so
+/// assuming equal spacing overshoots the prediction right after hand-off and
+/// loses the target. Pass 1.0 for uniformly spaced input.
 pub fn track_frame(
     marker: &CompiledMarker,
     frame: &GrayImage,
     state: &TrackState,
+    pred_scale: f64,
     cfg: &TrackerConfig,
 ) -> Option<TrackResult> {
     if marker.tracking_levels.is_empty() {
@@ -220,12 +239,13 @@ pub fn track_frame(
     // Predict each patch's frame position (constant velocity when possible).
     let margin = (cfg.half_window + cfg.presearch_radius + 3) as f32;
     let mut candidates: Vec<(usize, (f32, f32), f32)> = Vec::new(); // (patch idx, pred, score)
+    let alpha = pred_scale.clamp(0.0, 2.5);
     for (i, p) in level.patches.iter().enumerate() {
         let now = project(&h, p.x as f64, p.y as f64);
         let pred = match &state.h_prev {
             Some(hp) => {
                 let before = project(hp, p.x as f64, p.y as f64);
-                (2.0 * now.0 - before.0, 2.0 * now.1 - before.1)
+                (now.0 + (now.0 - before.0) * alpha, now.1 + (now.1 - before.1) * alpha)
             }
             None => now,
         };
@@ -317,9 +337,10 @@ pub fn track_frame(
             if !sample_frame_window(frame, px, py, hw, &mut window) {
                 break;
             }
+            let win_mean = window.iter().sum::<f32>() / win_len as f32;
             let (mut bx, mut by) = (0.0f32, 0.0f32);
             for i in 0..win_len {
-                let e = window[i] - wp.template[i];
+                let e = (window[i] - win_mean) - wp.template[i];
                 bx += wp.gx[i] * e;
                 by += wp.gy[i] * e;
             }
@@ -431,8 +452,8 @@ mod tests {
         let mut h0 = h_gt;
         h0[(0, 2)] += 2.1;
         h0[(1, 2)] -= 1.7;
-        let state = TrackState::new(h0);
-        let res = track_frame(&marker, &frame, &state, &TrackerConfig::default())
+        let state = TrackState::new(h0, 0.0);
+        let res = track_frame(&marker, &frame, &state, 1.0, &TrackerConfig::default())
             .expect("tracking should succeed");
         let err = corner_err(&res.h, &h_gt, 320.0, 320.0);
         assert!(err < 0.35, "corner error after track = {err:.3} px (survived {}/{})", res.survived, res.attempted);
@@ -446,7 +467,7 @@ mod tests {
         let h_gt = synthetic::trajectory_homography(320.0, 320.0, 640.0, 480.0, 0.13);
         // Frame WITHOUT the marker.
         let frame = synthetic::textured_image(640, 480, 555).box_blur(1);
-        let state = TrackState::new(h_gt);
-        assert!(track_frame(&marker, &frame, &state, &TrackerConfig::default()).is_none());
+        let state = TrackState::new(h_gt, 0.0);
+        assert!(track_frame(&marker, &frame, &state, 1.0, &TrackerConfig::default()).is_none());
     }
 }

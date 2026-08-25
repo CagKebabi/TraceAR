@@ -87,12 +87,14 @@ impl Engine {
         self.pipeline.reset();
     }
 
-    /// Stateful detect<->track processing of a live RGBA frame.
+    /// Stateful detect<->track processing of a live RGBA frame. `timestamp`
+    /// is the frame's capture time in ms (performance.now() domain) — used to
+    /// scale motion prediction to the real, non-uniform frame spacing.
     /// Returns RESULT_STRIDE f64 values per marker (see constant above);
     /// homographies map marker px -> frame px.
-    pub fn process_rgba(&mut self, rgba: &[u8], width: u32, height: u32) -> Result<Vec<f64>, JsValue> {
+    pub fn process_rgba(&mut self, rgba: &[u8], width: u32, height: u32, timestamp: f64) -> Result<Vec<f64>, JsValue> {
         let gray = rgba_to_gray(rgba, width as usize, height as usize)?;
-        let results = self.pipeline.process(&gray);
+        let results = self.pipeline.process(&gray, timestamp);
         let mut out = Vec::with_capacity(results.len() * RESULT_STRIDE);
         encode_results(&results, &mut out);
         Ok(out)

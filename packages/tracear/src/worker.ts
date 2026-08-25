@@ -70,7 +70,7 @@ self.onmessage = async (ev: MessageEvent<InitMessage | FrameMessage>) => {
       const data =
         msg.requestId !== undefined
           ? engine.detect_rgba(px, msg.width, msg.height)
-          : engine.process_rgba(px, msg.width, msg.height);
+          : engine.process_rgba(px, msg.width, msg.height, msg.timestamp);
       const ms = performance.now() - t0;
       post(
         {

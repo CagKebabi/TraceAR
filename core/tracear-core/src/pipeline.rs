@@ -92,8 +92,11 @@ impl Pipeline {
             .collect()
     }
 
-    /// Process one camera frame (stateful).
-    pub fn process(&mut self, frame: &GrayImage) -> Vec<PipelineResult> {
+    /// Process one camera frame (stateful). `t` is the frame's capture
+    /// timestamp in ms (any monotonic clock): frames do not arrive uniformly
+    /// (a detection frame takes ~5x a tracking frame), and the tracker's
+    /// motion prediction must be scaled by the real time gap.
+    pub fn process(&mut self, frame: &GrayImage, t: f64) -> Vec<PipelineResult> {
         // The tracker wants a lightly blurred frame; blur once, shared.
         let blurred = if self.states.iter().any(|s| s.is_some()) {
             Some(frame.box_blur(1))
@@ -103,12 +106,18 @@ impl Pipeline {
         let mut out = Vec::with_capacity(self.markers.len());
         for i in 0..self.markers.len() {
             let tracked = match (&self.states[i], &blurred) {
-                (Some(state), Some(bf)) => track_frame(&self.markers[i], bf, state, &self.tracker_config),
+                (Some(state), Some(bf)) => {
+                    let dt_prev = state.t_last - state.t_prev;
+                    let pred_scale = if dt_prev > 1e-6 { (t - state.t_last) / dt_prev } else { 1.0 };
+                    track_frame(&self.markers[i], bf, state, pred_scale, &self.tracker_config)
+                }
                 _ => None,
             };
             if let Some(tr) = tracked {
                 let state = self.states[i].as_mut().unwrap();
                 state.h_prev = Some(state.h);
+                state.t_prev = state.t_last;
+                state.t_last = t;
                 state.h = tr.h;
                 state.frames_tracked += 1;
                 let survival = tr.survived as f32 / tr.attempted.max(1) as f32;
@@ -125,7 +134,7 @@ impl Pipeline {
             self.states[i] = None;
             match detect_marker(&self.markers[i], frame, &self.detector_config) {
                 Some(d) => {
-                    self.states[i] = Some(TrackState::new(d.homography));
+                    self.states[i] = Some(TrackState::new(d.homography, t));
                     out.push(PipelineResult {
                         status: MarkerStatus::Detected,
                         homography: Some(d.homography),

@@ -35,7 +35,7 @@ fn static_scene_jitter_below_target() {
     let mut tracked: Vec<[(f64, f64); 4]> = Vec::new();
     for f in 0..40u64 {
         let frame = render(&marker_img, &bg, &h_gt, 1000 + f);
-        let res = &pipeline.process(&frame)[0];
+        let res = &pipeline.process(&frame, f as f64 * 33.0)[0];
         if f == 0 {
             assert_eq!(res.status, MarkerStatus::Detected, "first frame should acquire");
         } else {
@@ -84,7 +84,7 @@ fn survives_moderate_motion_sequence() {
         let t = f as f64 / 500.0;
         let h_gt = synthetic::trajectory_homography(320.0, 320.0, 480.0, 360.0, t);
         let frame = render(&marker_img, &bg, &h_gt, 5000 + f);
-        let res = &pipeline.process(&frame)[0];
+        let res = &pipeline.process(&frame, f as f64 * 33.0)[0];
         match res.status {
             MarkerStatus::Tracked => {
                 was_tracking = true;
@@ -116,4 +116,51 @@ fn survives_moderate_motion_sequence() {
     let mean_err = err_sum / tracked_frames.max(1) as f64;
     assert!(tracked_frames as f64 > frames as f64 * 0.9, "only {tracked_frames}/{frames} frames tracked");
     assert!(mean_err < 2.0, "mean corner error while tracking = {mean_err:.2} px");
+}
+
+/// Regression test for the real-phone hand-off failure: a detection frame is
+/// slow (~5x a tracking frame), so by the next processed frame a handheld
+/// camera has moved several px AND auto-exposure has shifted brightness —
+/// and the frame after that arrives quickly, so a uniform-spacing velocity
+/// prediction would overshoot ~5x. Tracking must stick through all of it.
+#[test]
+fn handoff_survives_motion_jump_exposure_shift_and_variable_timing() {
+    let marker_img = synthetic::textured_image(320, 320, 7);
+    let mut pipeline = Pipeline::new();
+    pipeline.add_marker(compile_marker(&marker_img, &CompileConfig::default()));
+    let bg = synthetic::textured_image(640, 480, 42);
+
+    let h0 = synthetic::trajectory_homography(320.0, 320.0, 640.0, 480.0, 0.3);
+    let mut translate = |h: &Matrix3<f64>, dx: f64, dy: f64| {
+        let mut m = *h;
+        m[(0, 2)] += dx;
+        m[(1, 2)] += dy;
+        m
+    };
+    // Frame A (t=0): acquisition.
+    let frame_a = render(&marker_img, &bg, &h0, 900);
+    let res = &pipeline.process(&frame_a, 0.0)[0];
+    assert_eq!(res.status, MarkerStatus::Detected);
+
+    // Frame B (t=45ms): ~7 px jump + AE brightness shift. Hand-off frame.
+    let h1 = translate(&h0, 6.0, -4.0);
+    let mut frame_b = render(&marker_img, &bg, &h1, 901);
+    synthetic::brightness_contrast(&mut frame_b, 1.0, 14.0);
+    let res = &pipeline.process(&frame_b, 45.0)[0];
+    assert_eq!(res.status, MarkerStatus::Tracked, "hand-off frame lost the target");
+
+    // Frame C (t=53ms): only 8 ms later -> true motion ~1.2 px. A uniform
+    // velocity prediction would extrapolate ~7 px and miss.
+    let h2 = translate(&h1, 1.1, -0.7);
+    let mut frame_c = render(&marker_img, &bg, &h2, 902);
+    synthetic::brightness_contrast(&mut frame_c, 1.0, 9.0);
+    let res = &pipeline.process(&frame_c, 53.0)[0];
+    assert_eq!(res.status, MarkerStatus::Tracked, "fast frame after hand-off lost the target");
+    let est = project_corners(&res.homography.unwrap(), 320.0, 320.0);
+    let gt = project_corners(&h2, 320.0, 320.0);
+    let err = (0..4)
+        .map(|c| ((est[c].0 - gt[c].0).powi(2) + (est[c].1 - gt[c].1).powi(2)).sqrt())
+        .sum::<f64>()
+        / 4.0;
+    assert!(err < 1.0, "corner error after variable-timing hand-off = {err:.2} px");
 }
