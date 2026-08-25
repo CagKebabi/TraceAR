@@ -7,7 +7,7 @@
 use crate::detector::{detect_marker, DetectorConfig};
 use crate::image::GrayImage;
 use crate::marker::CompiledMarker;
-use crate::tracker::{track_frame, TrackState, TrackerConfig};
+use crate::tracker::{track_frame, TrackMode, TrackState, TrackerConfig};
 use nalgebra::Matrix3;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -109,7 +109,19 @@ impl Pipeline {
                 (Some(state), Some(bf)) => {
                     let dt_prev = state.t_last - state.t_prev;
                     let pred_scale = if dt_prev > 1e-6 { (t - state.t_last) / dt_prev } else { 1.0 };
-                    track_frame(&self.markers[i], bf, state, pred_scale, &self.tracker_config)
+                    // Normal pass first; on failure one wide-presearch
+                    // recovery pass — still ~10x cheaper than full detection.
+                    track_frame(&self.markers[i], bf, state, pred_scale, TrackMode::Normal, &self.tracker_config)
+                        .or_else(|| {
+                            track_frame(
+                                &self.markers[i],
+                                bf,
+                                state,
+                                pred_scale,
+                                TrackMode::Recovery,
+                                &self.tracker_config,
+                            )
+                        })
                 }
                 _ => None,
             };
@@ -119,6 +131,7 @@ impl Pipeline {
                 state.t_prev = state.t_last;
                 state.t_last = t;
                 state.h = tr.h;
+                state.last_pred_err = tr.mean_pred_err;
                 state.frames_tracked += 1;
                 let survival = tr.survived as f32 / tr.attempted.max(1) as f32;
                 out.push(PipelineResult {

@@ -118,6 +118,64 @@ fn survives_moderate_motion_sequence() {
     assert!(mean_err < 2.0, "mean corner error while tracking = {mean_err:.2} px");
 }
 
+fn translated(h: &Matrix3<f64>, dx: f64, dy: f64) -> Matrix3<f64> {
+    let mut m = *h;
+    m[(0, 2)] += dx;
+    m[(1, 2)] += dy;
+    m
+}
+
+/// Handheld panning is not constant-velocity: it accelerates, reverses, blurs
+/// the image, and shifts exposure. The scout correction + recovery pass must
+/// keep tracking through it instead of falling back to detection every frame
+/// (the second real-device failure mode observed on the phone).
+#[test]
+fn survives_jerky_motion_with_blur_and_exposure() {
+    let marker_img = synthetic::textured_image(320, 320, 7);
+    let mut pipeline = Pipeline::new();
+    pipeline.add_marker(compile_marker(&marker_img, &CompileConfig::default()));
+    let bg = synthetic::textured_image(640, 480, 42);
+    let base = synthetic::trajectory_homography(320.0, 320.0, 640.0, 480.0, 0.3);
+
+    let frames = 120u64;
+    let mut losses = 0usize;
+    let mut was_tracking = false;
+    let mut tracked_frames = 0usize;
+    for f in 0..frames {
+        let ph = f as f64;
+        // Short-period sinusoids: velocity up to ~6 px/frame with direction
+        // reversals (~4 px/frame^2 acceleration a constant-velocity model
+        // cannot follow on its own).
+        let dx = 12.0 * (ph * std::f64::consts::TAU / 12.0).sin();
+        let dy = 9.0 * ((ph * std::f64::consts::TAU / 9.0).cos() - 1.0);
+        let h_gt = translated(&base, dx, dy);
+        let mut frame = render(&marker_img, &bg, &h_gt, 7000 + f);
+        if f % 3 == 0 {
+            frame = frame.box_blur(1); // pseudo motion blur
+        }
+        let exposure = 8.0 * (ph / 5.0).sin();
+        synthetic::brightness_contrast(&mut frame, 1.0, exposure);
+        let res = &pipeline.process(&frame, ph * 33.0)[0];
+        match res.status {
+            MarkerStatus::Tracked => {
+                was_tracking = true;
+                tracked_frames += 1;
+            }
+            _ => {
+                if was_tracking {
+                    losses += 1;
+                }
+                was_tracking = false;
+            }
+        }
+    }
+    assert!(losses <= 2, "{losses} losses under jerky motion (target <= 2)");
+    assert!(
+        tracked_frames as f64 >= frames as f64 * 0.85,
+        "only {tracked_frames}/{frames} frames tracked under jerky motion"
+    );
+}
+
 /// Regression test for the real-phone hand-off failure: a detection frame is
 /// slow (~5x a tracking frame), so by the next processed frame a handheld
 /// camera has moved several px AND auto-exposure has shifted brightness —

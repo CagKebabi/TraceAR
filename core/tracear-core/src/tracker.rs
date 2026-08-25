@@ -8,6 +8,19 @@
 //! converges to ~0.05 px, and pose noise scales directly with point noise —
 //! this is why tracking, not re-detection, is what makes the pose stable.
 //!
+//! Real-camera robustness measures (all off on a still phone, so the static
+//! path stays at its fastest):
+//! - Motion prediction is scaled by the actual inter-frame time gap
+//!   (`pred_scale`) — frames do not arrive uniformly.
+//! - LK is zero-mean (auto-exposure brightness offsets).
+//! - When the velocity model erred last frame, a few high-score "scout"
+//!   patches presearch a wide radius first and their median offset corrects
+//!   every patch's prediction — handheld motion is globally coherent over
+//!   one frame, so this recovers acceleration/jerk for the price of six
+//!   small searches.
+//! - `TrackMode::Recovery` (tried by the pipeline before falling back to a
+//!   ~10x more expensive full detection) presearches around every patch.
+//!
 //! Works on a lightly blurred (box radius 1) level-0 frame: templates were
 //! compiled from equally blurred marker levels, and the smoothing widens the
 //! LK convergence basin.
@@ -22,14 +35,25 @@ pub struct TrackerConfig {
     pub max_patches: usize,
     /// Half side of the LK window; window = (2h+1)^2 = 9x9 by default.
     pub half_window: i32,
-    /// Coarse NCC pre-search radius (px) used on the first frame after
-    /// detection, when no motion prediction exists yet.
+    /// NCC presearch radius (px) on the hand-off frame after detection,
+    /// where handheld motion accumulated over a slow detection frame.
     pub presearch_radius: i32,
     pub presearch_step: i32,
+    /// Scouts: leading patches that presearch to correct a stale velocity
+    /// model with a global shift.
+    pub scout_count: usize,
+    pub scout_radius: i32,
+    pub scout_min_ncc: f32,
+    /// Scouts activate when last frame's mean prediction error was at least
+    /// this many px.
+    pub scout_trigger_px: f32,
+    /// Recovery mode: per-patch presearch before giving up to detection.
+    pub recovery_radius: i32,
+    pub recovery_step: i32,
     pub lk_max_iters: usize,
     /// Convergence threshold on the LK update norm (px).
     pub lk_epsilon: f32,
-    /// A patch may not travel farther than this from its predicted start.
+    /// A patch may not travel farther than this from its search start.
     pub max_displacement: f32,
     /// Minimum normalized cross-correlation for a patch to survive.
     pub min_ncc: f32,
@@ -38,6 +62,8 @@ pub struct TrackerConfig {
     pub min_survival: f32,
     pub irls_iters: usize,
     pub huber_px: f64,
+    /// Median reprojection residual of survivors must stay below this.
+    pub max_median_residual_px: f64,
     /// Frame-to-frame corner motion above this means the fit went wild.
     pub max_corner_jump_px: f64,
 }
@@ -47,21 +73,33 @@ impl Default for TrackerConfig {
         Self {
             max_patches: 40,
             half_window: 4,
-            // Generous: only paid on the single hand-off frame after detection,
-            // where handheld motion accumulated over a slow detection frame.
             presearch_radius: 8,
             presearch_step: 2,
+            scout_count: 6,
+            scout_radius: 10,
+            scout_min_ncc: 0.5,
+            scout_trigger_px: 1.0,
+            recovery_radius: 12,
+            recovery_step: 3,
             lk_max_iters: 10,
             lk_epsilon: 0.02,
             max_displacement: 14.0,
-            min_ncc: 0.60,
+            min_ncc: 0.55,
             min_patches: 12,
-            min_survival: 0.35,
+            min_survival: 0.30,
             irls_iters: 3,
             huber_px: 1.5,
+            max_median_residual_px: 1.5,
             max_corner_jump_px: 80.0,
         }
     }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum TrackMode {
+    Normal,
+    /// Wide per-patch presearch — a last attempt before full re-detection.
+    Recovery,
 }
 
 pub struct TrackState {
@@ -73,12 +111,15 @@ pub struct TrackState {
     pub t_last: f64,
     /// Capture timestamp (ms) of the frame `h_prev` came from.
     pub t_prev: f64,
+    /// Mean |final - predicted| patch position error of the last tracked
+    /// frame; drives scout activation.
+    pub last_pred_err: f32,
     pub frames_tracked: u64,
 }
 
 impl TrackState {
     pub fn new(h: Matrix3<f64>, t: f64) -> Self {
-        Self { h, h_prev: None, t_last: t, t_prev: t, frames_tracked: 0 }
+        Self { h, h_prev: None, t_last: t, t_prev: t, last_pred_err: f32::MAX, frames_tracked: 0 }
     }
 }
 
@@ -87,6 +128,8 @@ pub struct TrackResult {
     pub attempted: usize,
     pub survived: usize,
     pub mean_ncc: f32,
+    /// Mean |final - predicted| over survivors (velocity-model quality).
+    pub mean_pred_err: f32,
 }
 
 /// Bilinear sample inside a stored PATCH_SIZE^2 template; None outside support.
@@ -130,11 +173,14 @@ fn ncc(a: &[f32], b: &[f32]) -> f32 {
     cov / (va * vb).sqrt()
 }
 
+fn median(v: &mut [f32]) -> f32 {
+    v.sort_by(f32::total_cmp);
+    v[v.len() / 2]
+}
+
 struct WarpedPatch {
     marker_pos: (f64, f64),
-    /// Predicted position of the patch center in the frame.
-    pred: (f32, f32),
-    /// (2h+1)^2 template values in frame-space geometry.
+    /// (2h+1)^2 zero-mean template values in frame-space geometry.
     template: Vec<f32>,
     /// Template gradients (same grid).
     gx: Vec<f32>,
@@ -149,7 +195,6 @@ fn warp_template(
     level_scale: f32,
     h: &Matrix3<f64>,
     h_inv: &Matrix3<f64>,
-    pred: (f32, f32),
     hw: i32,
 ) -> Option<WarpedPatch> {
     let center = project(h, patch.x as f64, patch.y as f64);
@@ -183,10 +228,10 @@ fn warp_template(
     for v in template.iter_mut() {
         *v -= mean;
     }
-    Some(WarpedPatch { marker_pos: (patch.x as f64, patch.y as f64), pred, template, gx, gy })
+    Some(WarpedPatch { marker_pos: (patch.x as f64, patch.y as f64), template, gx, gy })
 }
 
-/// Sample the frame window centered at (px, py); None if any sample would
+/// Sample the frame window centered at (px, py); false if any sample would
 /// leave the frame.
 fn sample_frame_window(frame: &GrayImage, px: f32, py: f32, hw: i32, out: &mut Vec<f32>) -> bool {
     let margin = (hw + 1) as f32;
@@ -202,6 +247,37 @@ fn sample_frame_window(frame: &GrayImage, px: f32, py: f32, hw: i32, out: &mut V
     true
 }
 
+/// Best-NCC position on a grid around `center`. Returns (x, y, ncc).
+fn presearch(
+    frame: &GrayImage,
+    template: &[f32],
+    center: (f32, f32),
+    radius: i32,
+    step: i32,
+    hw: i32,
+    window: &mut Vec<f32>,
+) -> (f32, f32, f32) {
+    let mut best = (center.0, center.1, f32::MIN);
+    let step = step.max(1);
+    let mut oy = -radius;
+    while oy <= radius {
+        let mut ox = -radius;
+        while ox <= radius {
+            let tx = center.0 + ox as f32;
+            let ty = center.1 + oy as f32;
+            if sample_frame_window(frame, tx, ty, hw, window) {
+                let s = ncc(template, window);
+                if s > best.2 {
+                    best = (tx, ty, s);
+                }
+            }
+            ox += step;
+        }
+        oy += step;
+    }
+    best
+}
+
 /// `pred_scale` rescales the constant-velocity prediction to the actual time
 /// gap: (t_now - t_last) / (t_last - t_prev). Camera frames do NOT arrive
 /// uniformly — a detection frame takes ~5x longer than a tracking frame, so
@@ -212,6 +288,7 @@ pub fn track_frame(
     frame: &GrayImage,
     state: &TrackState,
     pred_scale: f64,
+    mode: TrackMode,
     cfg: &TrackerConfig,
 ) -> Option<TrackResult> {
     if marker.tracking_levels.is_empty() {
@@ -236,10 +313,10 @@ pub fn track_frame(
         })
         .unwrap();
 
-    // Predict each patch's frame position (constant velocity when possible).
-    let margin = (cfg.half_window + cfg.presearch_radius + 3) as f32;
-    let mut candidates: Vec<(usize, (f32, f32), f32)> = Vec::new(); // (patch idx, pred, score)
+    // Predict each patch's frame position (time-scaled constant velocity).
+    let margin = (cfg.half_window + cfg.recovery_radius.max(cfg.scout_radius) + 3) as f32;
     let alpha = pred_scale.clamp(0.0, 2.5);
+    let mut candidates: Vec<(usize, (f32, f32), f32)> = Vec::new(); // (patch idx, pred, score)
     for (i, p) in level.patches.iter().enumerate() {
         let now = project(&h, p.x as f64, p.y as f64);
         let pred = match &state.h_prev {
@@ -273,20 +350,51 @@ pub fn track_frame(
     active.sort_by(|&a, &b| candidates[b].2.total_cmp(&candidates[a].2));
     active.truncate(cfg.max_patches);
 
-    // Align every active patch.
+    // Phase 1: warp all active templates.
     let hw = cfg.half_window;
     let win_len = ((2 * hw + 1) * (2 * hw + 1)) as usize;
     let mut window = Vec::with_capacity(win_len);
+    let mut prepared: Vec<(WarpedPatch, (f32, f32))> = Vec::new(); // (patch, predicted pos)
+    for &ci in &active {
+        let (pi, pred, _) = candidates[ci];
+        if let Some(wp) = warp_template(&level.patches[pi], level.scale, &h, &h_inv, hw) {
+            prepared.push((wp, pred));
+        }
+    }
+
+    // Phase 2: choose per-patch search starts.
+    let full_presearch = state.frames_tracked == 0 || mode == TrackMode::Recovery;
+    let (radius, step) = match mode {
+        TrackMode::Recovery => (cfg.recovery_radius, cfg.recovery_step),
+        TrackMode::Normal => (cfg.presearch_radius, cfg.presearch_step),
+    };
+    // Scouts: when the velocity model erred last frame, estimate the global
+    // shift from a few wide searches and correct every prediction with it.
+    let mut shift = (0.0f32, 0.0f32);
+    if !full_presearch && state.last_pred_err >= cfg.scout_trigger_px {
+        let mut dxs = Vec::new();
+        let mut dys = Vec::new();
+        for (wp, pred) in prepared.iter().take(cfg.scout_count) {
+            let (bx, by, bncc) =
+                presearch(frame, &wp.template, *pred, cfg.scout_radius, cfg.presearch_step, hw, &mut window);
+            if bncc >= cfg.scout_min_ncc {
+                dxs.push(bx - pred.0);
+                dys.push(by - pred.1);
+            }
+        }
+        if dxs.len() >= 3 {
+            shift = (median(&mut dxs), median(&mut dys));
+        }
+    }
+
+    // Phase 3: align.
     let mut attempted = 0usize;
     let mut corr_src: Vec<(f64, f64)> = Vec::new();
     let mut corr_dst: Vec<(f64, f64)> = Vec::new();
     let mut nccs: Vec<f32> = Vec::new();
+    let mut pred_errs: Vec<f32> = Vec::new();
 
-    for &ci in &active {
-        let (pi, pred, _) = candidates[ci];
-        let Some(wp) = warp_template(&level.patches[pi], level.scale, &h, &h_inv, pred, hw) else {
-            continue;
-        };
+    for (wp, pred) in &prepared {
         attempted += 1;
 
         // Inverse-compositional precomputation: 2x2 normal matrix of the
@@ -303,30 +411,10 @@ pub fn track_frame(
         }
         let (i00, i01, i11) = (syy / det, -sxy / det, sxx / det);
 
-        // Coarse NCC pre-search on the first tracked frame (no prediction yet).
-        let (mut px, mut py) = wp.pred;
-        if state.frames_tracked == 0 {
-            let mut best = f32::MIN;
-            let (mut bx, mut by) = (px, py);
-            let r = cfg.presearch_radius;
-            let step = cfg.presearch_step.max(1);
-            let mut oy = -r;
-            while oy <= r {
-                let mut ox = -r;
-                while ox <= r {
-                    let (tx, ty) = (wp.pred.0 + ox as f32, wp.pred.1 + oy as f32);
-                    if sample_frame_window(frame, tx, ty, hw, &mut window) {
-                        let s = ncc(&wp.template, &window);
-                        if s > best {
-                            best = s;
-                            bx = tx;
-                            by = ty;
-                        }
-                    }
-                    ox += step;
-                }
-                oy += step;
-            }
+        let start = (pred.0 + shift.0, pred.1 + shift.1);
+        let (mut px, mut py) = start;
+        if full_presearch {
+            let (bx, by, _) = presearch(frame, &wp.template, start, radius, step, hw, &mut window);
             px = bx;
             py = by;
         }
@@ -348,8 +436,8 @@ pub fn track_frame(
             let dy = i01 * bx + i11 * by;
             px -= dx;
             py -= dy;
-            let dpx = px - wp.pred.0;
-            let dpy = py - wp.pred.1;
+            let dpx = px - start.0;
+            let dpy = py - start.1;
             if dpx * dpx + dpy * dpy > cfg.max_displacement * cfg.max_displacement {
                 break;
             }
@@ -371,6 +459,7 @@ pub fn track_frame(
         corr_src.push(wp.marker_pos);
         corr_dst.push((px as f64, py as f64));
         nccs.push(score);
+        pred_errs.push(((px - pred.0).powi(2) + (py - pred.1).powi(2)).sqrt());
     }
 
     let survived = corr_src.len();
@@ -397,7 +486,18 @@ pub fn track_frame(
         h_new = dlt_weighted(&corr_src, &corr_dst, &weights)?;
     }
 
-    // Sanity: bounded frame-to-frame motion, non-degenerate quad.
+    // Sanity: consistent survivors, bounded motion, non-degenerate quad.
+    let mut residuals: Vec<f32> = corr_src
+        .iter()
+        .zip(&corr_dst)
+        .map(|(&(sx, sy), &(dx, dy))| {
+            let p = project(&h_new, sx, sy);
+            (((p.0 - dx).powi(2) + (p.1 - dy).powi(2)) as f32).sqrt()
+        })
+        .collect();
+    if median(&mut residuals) as f64 > cfg.max_median_residual_px {
+        return None;
+    }
     if !quad_sane(&h_new, mw, mh) {
         return None;
     }
@@ -410,7 +510,8 @@ pub fn track_frame(
     }
 
     let mean_ncc = nccs.iter().sum::<f32>() / survived as f32;
-    Some(TrackResult { h: h_new, attempted, survived, mean_ncc })
+    let mean_pred_err = pred_errs.iter().sum::<f32>() / survived as f32;
+    Some(TrackResult { h: h_new, attempted, survived, mean_ncc, mean_pred_err })
 }
 
 #[cfg(test)]
@@ -453,11 +554,36 @@ mod tests {
         h0[(0, 2)] += 2.1;
         h0[(1, 2)] -= 1.7;
         let state = TrackState::new(h0, 0.0);
-        let res = track_frame(&marker, &frame, &state, 1.0, &TrackerConfig::default())
+        let res = track_frame(&marker, &frame, &state, 1.0, TrackMode::Normal, &TrackerConfig::default())
             .expect("tracking should succeed");
         let err = corner_err(&res.h, &h_gt, 320.0, 320.0);
         assert!(err < 0.35, "corner error after track = {err:.3} px (survived {}/{})", res.survived, res.attempted);
         assert!(res.survived >= 15, "only {} patches survived", res.survived);
+    }
+
+    #[test]
+    fn recovery_mode_survives_large_offset() {
+        let marker_img = synthetic::textured_image(320, 320, 7);
+        let marker = compile_marker(&marker_img, &CompileConfig::default());
+        let h_gt = synthetic::trajectory_homography(320.0, 320.0, 640.0, 480.0, 0.13);
+        let frame = render_tracking_frame(&marker_img, &h_gt, 99);
+
+        // ~11 px off — beyond the plain LK basin, inside recovery's reach.
+        let mut h0 = h_gt;
+        h0[(0, 2)] += 8.0;
+        h0[(1, 2)] -= 7.5;
+        let mut state = TrackState::new(h0, 0.0);
+        state.frames_tracked = 5; // not a hand-off frame: no automatic presearch
+        state.last_pred_err = 0.0; // and scouts disabled
+        let cfg = TrackerConfig::default();
+        assert!(
+            track_frame(&marker, &frame, &state, 1.0, TrackMode::Normal, &cfg).is_none(),
+            "plain LK should not reach an 11 px offset"
+        );
+        let res = track_frame(&marker, &frame, &state, 1.0, TrackMode::Recovery, &cfg)
+            .expect("recovery mode should re-lock");
+        let err = corner_err(&res.h, &h_gt, 320.0, 320.0);
+        assert!(err < 0.5, "corner error after recovery = {err:.3} px");
     }
 
     #[test]
@@ -468,6 +594,8 @@ mod tests {
         // Frame WITHOUT the marker.
         let frame = synthetic::textured_image(640, 480, 555).box_blur(1);
         let state = TrackState::new(h_gt, 0.0);
-        assert!(track_frame(&marker, &frame, &state, 1.0, &TrackerConfig::default()).is_none());
+        let cfg = TrackerConfig::default();
+        assert!(track_frame(&marker, &frame, &state, 1.0, TrackMode::Normal, &cfg).is_none());
+        assert!(track_frame(&marker, &frame, &state, 1.0, TrackMode::Recovery, &cfg).is_none());
     }
 }
