@@ -1,0 +1,8 @@
+[workspace]
+members = ["tracear-core"]
+resolver = "2"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
