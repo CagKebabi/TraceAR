@@ -97,25 +97,29 @@ impl Pipeline {
     /// (a detection frame takes ~5x a tracking frame), and the tracker's
     /// motion prediction must be scaled by the real time gap.
     pub fn process(&mut self, frame: &GrayImage, t: f64) -> Vec<PipelineResult> {
-        // The tracker wants a lightly blurred frame; blur once, shared.
+        // The tracker wants a lightly blurred frame plus its half-resolution
+        // downsample (coarse stage); build once, shared across markers.
         let blurred = if self.states.iter().any(|s| s.is_some()) {
-            Some(frame.box_blur(1))
+            let b = frame.box_blur(1);
+            let half = b.downsample_half();
+            Some((b, half))
         } else {
             None
         };
         let mut out = Vec::with_capacity(self.markers.len());
         for i in 0..self.markers.len() {
             let tracked = match (&self.states[i], &blurred) {
-                (Some(state), Some(bf)) => {
+                (Some(state), Some((bf, half))) => {
                     let dt_prev = state.t_last - state.t_prev;
                     let pred_scale = if dt_prev > 1e-6 { (t - state.t_last) / dt_prev } else { 1.0 };
-                    // Normal pass first; on failure one wide-presearch
-                    // recovery pass — still ~10x cheaper than full detection.
-                    track_frame(&self.markers[i], bf, state, pred_scale, TrackMode::Normal, &self.tracker_config)
+                    // Normal pass first; on failure one wide-coarse-search
+                    // recovery pass — still ~7x cheaper than full detection.
+                    track_frame(&self.markers[i], bf, half, state, pred_scale, TrackMode::Normal, &self.tracker_config)
                         .or_else(|| {
                             track_frame(
                                 &self.markers[i],
                                 bf,
+                                half,
                                 state,
                                 pred_scale,
                                 TrackMode::Recovery,
