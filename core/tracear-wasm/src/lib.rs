@@ -30,8 +30,10 @@ fn rgba_to_gray(rgba: &[u8], w: usize, h: usize) -> Result<GrayImage, JsValue> {
 ///  vx, vy, vz                (filtered linear velocity, units/s),
 ///  wx, wy, wz                (body-frame angular velocity, rad/s),
 ///  posLagS, rotLagS          (filter group delay, seconds),
-///  focalRatio                (current f / frame_width estimate)]
-pub const RESULT_STRIDE: usize = 30;
+///  rqx, rqy, rqz, rqw        (raw un-filtered rotation),
+///  rtx, rty, rtz             (raw un-filtered translation),
+///  focalRatio                (current f / long_side estimate)]
+pub const RESULT_STRIDE: usize = 37;
 
 fn encode_results(results: &[SessionResult], focal_ratio: f64, out: &mut Vec<f64>) {
     for r in results {
@@ -53,8 +55,8 @@ fn encode_results(results: &[SessionResult], focal_ratio: f64, out: &mut Vec<f64
         out.push(r.tracking.n_good as f64);
         out.push(r.tracking.n_total as f64);
         out.push(r.tracking.quality as f64);
-        match &r.pose {
-            Some(p) => {
+        match (&r.pose, &r.raw) {
+            (Some(p), Some(raw)) => {
                 out.push(1.0);
                 let q = p.rotation.quaternion();
                 out.extend_from_slice(&[q.i, q.j, q.k, q.w]);
@@ -62,8 +64,11 @@ fn encode_results(results: &[SessionResult], focal_ratio: f64, out: &mut Vec<f64
                 out.extend_from_slice(&[p.velocity.x, p.velocity.y, p.velocity.z]);
                 out.extend_from_slice(&[p.angular_velocity.x, p.angular_velocity.y, p.angular_velocity.z]);
                 out.extend_from_slice(&[p.pos_lag_s, p.rot_lag_s]);
+                let rq = raw.rotation.quaternion();
+                out.extend_from_slice(&[rq.i, rq.j, rq.k, rq.w]);
+                out.extend_from_slice(&[raw.translation.x, raw.translation.y, raw.translation.z]);
             }
-            None => out.extend_from_slice(&[0.0; 16]),
+            _ => out.extend_from_slice(&[0.0; 23]),
         }
         out.push(focal_ratio);
     }

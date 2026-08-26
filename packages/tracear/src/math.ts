@@ -22,6 +22,39 @@ export function quatFromScaledAxis(v: Vec3): Quat {
   return [v[0] * s, v[1] * s, v[2] * s, Math.cos(angle / 2)];
 }
 
+/** Spherical interpolation with hemisphere handling. */
+export function quatSlerp(a: Quat, b: Quat, t: number): Quat {
+  let [bx, by, bz, bw] = b;
+  let dot = a[0] * bx + a[1] * by + a[2] * bz + a[3] * bw;
+  if (dot < 0) {
+    bx = -bx;
+    by = -by;
+    bz = -bz;
+    bw = -bw;
+    dot = -dot;
+  }
+  if (dot > 0.9995) {
+    // nearly parallel: lerp + normalize
+    const x = a[0] + (bx - a[0]) * t;
+    const y = a[1] + (by - a[1]) * t;
+    const z = a[2] + (bz - a[2]) * t;
+    const w = a[3] + (bw - a[3]) * t;
+    const n = Math.hypot(x, y, z, w) || 1;
+    return [x / n, y / n, z / n, w / n];
+  }
+  const theta = Math.acos(dot);
+  const s = Math.sin(theta);
+  const wa = Math.sin((1 - t) * theta) / s;
+  const wb = Math.sin(t * theta) / s;
+  return [a[0] * wa + bx * wb, a[1] * wa + by * wb, a[2] * wa + bz * wb, a[3] * wa + bw * wb];
+}
+
+/** Angle (rad) between two rotations. */
+export function quatAngle(a: Quat, b: Quat): number {
+  const dot = Math.abs(a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3]);
+  return 2 * Math.acos(Math.min(1, dot));
+}
+
 /**
  * Column-major 4x4 rigid transform from quaternion + translation
  * (the layout WebGL and three.js use).

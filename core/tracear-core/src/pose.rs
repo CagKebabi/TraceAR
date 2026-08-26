@@ -29,14 +29,17 @@ pub struct Intrinsics {
 }
 
 impl Intrinsics {
-    /// `focal_ratio` = f / image_width (square pixels, centered principal point).
+    /// `focal_ratio` = f / long_side — defined against the LONG side so the
+    /// ratio is orientation-invariant (a portrait phone stream is the same
+    /// camera rotated; f in px does not change, the short side does).
     pub fn from_focal_ratio(focal_ratio: f64, width: f64, height: f64) -> Self {
-        let f = focal_ratio * width;
+        let f = focal_ratio * width.max(height);
         Self { fx: f, fy: f, cx: width / 2.0, cy: height / 2.0 }
     }
 }
 
-/// Typical phone main camera: ~65 deg horizontal FOV -> f ~= 0.785 * width.
+/// Typical phone main camera: ~65 deg FOV along the long side
+/// -> f ~= 0.785 * long_side.
 pub const DEFAULT_FOCAL_RATIO: f64 = 0.785;
 
 #[derive(Clone, Copy, Debug)]
@@ -278,6 +281,7 @@ impl FocalEstimator {
 
     /// Feed one object->image homography (any uniform-scale object frame).
     pub fn observe(&mut self, h_obj: &Matrix3<f64>, width: f64, height: f64) {
+        let long_side = width.max(height);
         let (cx, cy) = (width / 2.0, height / 2.0);
         let col = |i: usize| (h_obj[(0, i)], h_obj[(1, i)], h_obj[(2, i)]);
         let (a0, b0, w0) = col(0);
@@ -289,7 +293,7 @@ impl FocalEstimator {
         let mut pushed = 0usize;
         let mut push = |samples: &mut Vec<f64>, pos: &mut usize, f2: f64| {
             if f2.is_finite() && f2 > 0.0 {
-                let ratio = f2.sqrt() / width;
+                let ratio = f2.sqrt() / long_side;
                 if (0.4..=2.5).contains(&ratio) {
                     if samples.len() < 90 {
                         samples.push(ratio);

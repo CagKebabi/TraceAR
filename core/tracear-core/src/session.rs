@@ -39,6 +39,10 @@ pub struct SessionResult {
     /// Filtered pose (with velocities) when the target was found and pose
     /// estimation succeeded.
     pub pose: Option<FilteredPose>,
+    /// This frame's un-filtered pose measurement: zero-lag but noisy. The
+    /// renderer blends toward it with speed, since motion masks noise while
+    /// filter lag would show as swimming.
+    pub raw: Option<Pose>,
 }
 
 pub struct Session {
@@ -94,6 +98,7 @@ impl Session {
         for (i, r) in results.into_iter().enumerate() {
             let state = &mut self.states[i];
             let mut pose_out = None;
+            let mut raw_out = None;
             match (&r.homography, r.status) {
                 (Some(h), _) => {
                     state.misses = 0;
@@ -109,6 +114,7 @@ impl Session {
                         estimate_pose(h, mw, mh, state.phys_width, &k, state.last_pose.as_ref())
                     {
                         state.last_pose = Some(p);
+                        raw_out = Some(p);
                         pose_out = Some(state.filter.update(t_ms, &p));
                     }
                 }
@@ -120,7 +126,7 @@ impl Session {
                     }
                 }
             }
-            out.push(SessionResult { tracking: r, pose: pose_out });
+            out.push(SessionResult { tracking: r, pose: pose_out, raw: raw_out });
         }
         out
     }
@@ -133,26 +139,26 @@ impl Session {
             .into_iter()
             .enumerate()
             .map(|(i, r)| {
-                let pose = r.homography.as_ref().and_then(|h| {
+                let raw = r.homography.as_ref().and_then(|h| {
                     let marker = self.pipeline.marker(i)?;
-                    let p = estimate_pose(
+                    estimate_pose(
                         h,
                         marker.width as f64,
                         marker.height as f64,
                         self.states[i].phys_width,
                         &k,
                         None,
-                    )?;
-                    Some(FilteredPose {
-                        rotation: p.rotation,
-                        translation: p.translation,
-                        velocity: nalgebra::Vector3::zeros(),
-                        angular_velocity: nalgebra::Vector3::zeros(),
-                        pos_lag_s: 0.0,
-                        rot_lag_s: 0.0,
-                    })
+                    )
                 });
-                SessionResult { tracking: r, pose }
+                let pose = raw.map(|p| FilteredPose {
+                    rotation: p.rotation,
+                    translation: p.translation,
+                    velocity: nalgebra::Vector3::zeros(),
+                    angular_velocity: nalgebra::Vector3::zeros(),
+                    pos_lag_s: 0.0,
+                    rot_lag_s: 0.0,
+                });
+                SessionResult { tracking: r, pose, raw }
             })
             .collect()
     }

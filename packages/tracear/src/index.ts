@@ -6,7 +6,15 @@
  * API; `poseAt` stays null until M3.
  */
 import { Emitter } from "./events";
-import { mat4FromPose, quatFromScaledAxis, quatMultiply, type Quat, type Vec3 } from "./math";
+import {
+  mat4FromPose,
+  quatAngle,
+  quatFromScaledAxis,
+  quatMultiply,
+  quatSlerp,
+  type Quat,
+  type Vec3,
+} from "./math";
 import type { ReadyMessage, ResultMessage, ErrorMessage } from "./worker";
 
 export type Homography = Float64Array;
@@ -14,8 +22,8 @@ export type Homography = Float64Array;
 /** Values per marker in a worker result (mirrors the wasm crate):
  * [status (0/1/2), h00..h22, nGood, nTotal, quality,
  *  poseValid, qx,qy,qz,qw, tx,ty,tz, vx,vy,vz, wx,wy,wz,
- *  posLagS, rotLagS, focalRatio] */
-const RESULT_STRIDE = 30;
+ *  posLagS, rotLagS, rqx,rqy,rqz,rqw, rtx,rty,rtz, focalRatio] */
+const RESULT_STRIDE = 37;
 
 export interface TracearConfig {
   /** Element the managed <video> is appended to; position it yourself (e.g. relative). */
@@ -51,6 +59,10 @@ export interface PoseData {
   posLagS: number;
   /** Group delay (s) of the rotation filter. */
   rotLagS: number;
+  /** This frame's un-filtered pose: zero-lag but noisy. Rendering blends
+   * toward it with speed (motion masks noise; filter lag would show as swim). */
+  rawPosition: Vec3;
+  rawQuaternion: Quat;
 }
 
 export interface CameraIntrinsics {
@@ -121,7 +133,8 @@ export class Tracear {
   private processH = 0;
   private nextRequestId = 1;
   private pending = new Map<number, (r: ResultMessage) => void>();
-  private lastPoses: ({ pose: PoseData; timestamp: number } | null)[] = [];
+  private lastPoses: ({ pose: PoseData; timestamp: number; instSpeed?: number; instAngSpeed?: number } | null)[] =
+    [];
   private focalRatio = 0;
   private lastProcessW = 0;
   private lastProcessH = 0;
@@ -252,12 +265,31 @@ export class Tracear {
     const lp = this.lastPoses[index];
     if (!lp) return null;
     const { pose } = lp;
-    // Prediction horizon = pipeline latency (capture -> now) + the filter's
-    // own group delay, so content lands where the target IS, not where the
-    // lagging filtered signal says it was.
+    // Speed-adaptive raw/filtered blend: at rest render the filtered pose
+    // (frozen); the moment motion starts (instantaneous speed responds
+    // within one frame) shift toward the RAW measurement, which has zero
+    // filter lag — motion masks its noise, while filter lag would read as
+    // the content swimming behind the target.
+    const smoothstep = (x: number, lo: number, hi: number) => {
+      const t = Math.min(Math.max((x - lo) / (hi - lo), 0), 1);
+      return t * t * (3 - 2 * t);
+    };
+    const alpha = Math.max(
+      smoothstep(lp.instSpeed ?? 0, 0.04, 0.3),
+      smoothstep(lp.instAngSpeed ?? 0, 0.06, 0.5),
+    );
+    const basePos: Vec3 = [
+      pose.position[0] + (pose.rawPosition[0] - pose.position[0]) * alpha,
+      pose.position[1] + (pose.rawPosition[1] - pose.position[1]) * alpha,
+      pose.position[2] + (pose.rawPosition[2] - pose.position[2]) * alpha,
+    ];
+    const baseQ = quatSlerp(pose.quaternion, pose.rawQuaternion, alpha);
+
+    // Extrapolate over the pipeline latency, plus the filter's group delay
+    // for whatever share of the pose still comes from the filtered signal.
     const latency = Math.min(Math.max((timestamp - lp.timestamp) / 1000, 0), 0.1);
-    const dtPos = Math.min(latency + pose.posLagS, 0.25);
-    const dtRot = Math.min(latency + pose.rotLagS, 0.25);
+    const dtPos = Math.min(latency + (1 - alpha) * pose.posLagS, 0.25);
+    const dtRot = Math.min(latency + (1 - alpha) * pose.rotLagS, 0.25);
     // Deadband: velocity estimates are never exactly zero — do not let their
     // noise wiggle a still scene. Clamp: never extrapolate absurdly far.
     const v = pose.velocity.map((x) => (Math.abs(x) < 0.01 ? 0 : x)) as Vec3;
@@ -265,21 +297,22 @@ export class Tracear {
     const step = Math.hypot(v[0], v[1], v[2]) * dtPos;
     const posScale = step > 0.2 ? 0.2 / step : 1;
     const p: Vec3 = [
-      pose.position[0] + v[0] * dtPos * posScale,
-      pose.position[1] + v[1] * dtPos * posScale,
-      pose.position[2] + v[2] * dtPos * posScale,
+      basePos[0] + v[0] * dtPos * posScale,
+      basePos[1] + v[1] * dtPos * posScale,
+      basePos[2] + v[2] * dtPos * posScale,
     ];
     const angle = Math.hypot(w[0], w[1], w[2]) * dtRot;
     const rotScale = angle > 0.3 ? 0.3 / angle : 1;
     const dq = quatFromScaledAxis([w[0] * dtRot * rotScale, w[1] * dtRot * rotScale, w[2] * dtRot * rotScale]);
-    const q = quatMultiply(pose.quaternion, dq);
+    const q = quatMultiply(baseQ, dq);
     return mat4FromPose(q, p);
   }
 
   /** Latest camera intrinsics estimate (null before the first result). */
   intrinsics(): CameraIntrinsics | null {
     if (!this.focalRatio || !this.lastProcessW) return null;
-    const f = this.focalRatio * this.lastProcessW;
+    // focalRatio is defined against the LONG side (orientation-invariant).
+    const f = this.focalRatio * Math.max(this.lastProcessW, this.lastProcessH);
     return {
       fx: f,
       fy: f,
@@ -373,6 +406,8 @@ export class Tracear {
         angularVelocity: [d[base + 24], d[base + 25], d[base + 26]],
         posLagS: d[base + 27],
         rotLagS: d[base + 28],
+        rawQuaternion: [d[base + 29], d[base + 30], d[base + 31], d[base + 32]],
+        rawPosition: [d[base + 33], d[base + 34], d[base + 35]],
       };
     }
     return {
@@ -400,9 +435,21 @@ export class Tracear {
       const state = this.targets[i];
       const update = this.parseUpdate(msg, i);
       if (update) {
-        this.focalRatio = msg.data[i * RESULT_STRIDE + 29];
+        this.focalRatio = msg.data[i * RESULT_STRIDE + 36];
         if (update.pose) {
-          this.lastPoses[i] = { pose: update.pose, timestamp: msg.timestamp };
+          // Instantaneous speed from consecutive RAW poses: responds within
+          // one frame of motion starting — the filtered velocity estimate
+          // lags and would delay the raw/filtered rendering blend.
+          const prev = this.lastPoses[i];
+          let instSpeed = 0;
+          let instAngSpeed = 0;
+          if (prev) {
+            const dt = Math.max((msg.timestamp - prev.timestamp) / 1000, 1e-3);
+            const dp = update.pose.rawPosition.map((v, k) => v - prev.pose.rawPosition[k]);
+            instSpeed = Math.hypot(dp[0], dp[1], dp[2]) / dt;
+            instAngSpeed = quatAngle(update.pose.rawQuaternion, prev.pose.rawQuaternion) / dt;
+          }
+          this.lastPoses[i] = { pose: update.pose, timestamp: msg.timestamp, instSpeed, instAngSpeed };
         }
         state.misses = 0;
         if (!state.found) {
