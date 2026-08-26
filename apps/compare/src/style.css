@@ -130,6 +130,10 @@ button.secondary {
   overflow: hidden;
   background: #000;
   min-height: 40px;
+  /* MindAR puts its <video> at z-index -2; without a local stacking context
+     that lands BEHIND this element's background in the root context and the
+     camera image is invisible. isolation keeps the video inside #view. */
+  isolation: isolate;
 }
 
 #view video {

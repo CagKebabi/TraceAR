@@ -56,8 +56,9 @@
           <tbody></tbody>
         </table>
         <p class="muted">
-          Jitter = RMS deviation of the marker center (normalized to a 640 px frame) over a
-          trailing window, sampled only while the target is visible. Lower is better.
+          Jitter = per-frame noise of the marker center (normalized to a 640 px frame),
+          measured via second differences so deliberate camera motion cancels out —
+          only frame-to-frame shake counts. Lower is better.
         </p>
       </section>
     </main>

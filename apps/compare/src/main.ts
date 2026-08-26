@@ -57,7 +57,13 @@ const resultsBody = document.querySelector<HTMLTableSectionElement>("#results tb
 
 /* ------------------------------ metrics ------------------------------- */
 
-/** RMS deviation of recent (x, y) samples, in 640px-frame units. */
+/**
+ * High-frequency jitter of recent (x, y) samples, in 640px-frame units.
+ * Uses the RMS of second differences (curvature), which cancels constant
+ * velocity — so deliberate camera motion does not read as "jitter", only
+ * frame-to-frame noise does. For white noise E[|d2|^2] = 1.5 sigma^2 per
+ * axis; dividing by 1.5 makes the value an unbiased per-frame sigma.
+ */
 class JitterMeter {
   private buf: [number, number][] = [];
   push(x: number, y: number): void {
@@ -68,20 +74,17 @@ class JitterMeter {
     this.buf = [];
   }
   rms(): number | null {
-    if (this.buf.length < 30) return null;
-    let mx = 0;
-    let my = 0;
-    for (const [x, y] of this.buf) {
-      mx += x;
-      my += y;
-    }
-    mx /= this.buf.length;
-    my /= this.buf.length;
+    const n = this.buf.length;
+    if (n < 30) return null;
     let s = 0;
-    for (const [x, y] of this.buf) {
-      s += (x - mx) ** 2 + (y - my) ** 2;
+    let cnt = 0;
+    for (let i = 1; i + 1 < n; i++) {
+      const ax = this.buf[i][0] - (this.buf[i - 1][0] + this.buf[i + 1][0]) / 2;
+      const ay = this.buf[i][1] - (this.buf[i - 1][1] + this.buf[i + 1][1]) / 2;
+      s += ax * ax + ay * ay;
+      cnt++;
     }
-    return Math.sqrt(s / this.buf.length);
+    return Math.sqrt(s / cnt / 1.5);
   }
 }
 
@@ -280,9 +283,10 @@ let warnMsg: string | null = null;
 function beginStatsLoop(name: EngineName, extra: () => string): void {
   runStart = performance.now();
   jitter.clear();
+  const baseSeconds = stats[name].runSeconds; // accumulate across restarts
   statsTimer = window.setInterval(() => {
     const st = stats[name];
-    st.runSeconds = (performance.now() - runStart) / 1000;
+    st.runSeconds = baseSeconds + (performance.now() - runStart) / 1000;
     const r = jitter.rms();
     if (r !== null) st.jitterSnapshots.push(r);
     if (warnMsg) {
