@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tracear vs MindAR</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Tracear <span class="vs">vs</span> MindAR <span class="tag">same marker · same metric</span></h1>
+
+      <section class="card">
+        <h2>1 · Marker</h2>
+        <div class="row">
+          <button id="btn-sample">Generate sample marker</button>
+          <label class="file-label">
+            or use your own image
+            <input type="file" id="file-input" accept="image/*" />
+          </label>
+        </div>
+        <p id="marker-status" class="muted">No marker compiled yet. Both engines compile the same image.</p>
+        <div id="marker-panel" hidden>
+          <canvas id="marker-preview" width="160" height="160"></canvas>
+          <p class="muted">
+            Show this marker from another screen or
+            <a id="download-link" download="marker.png">print the PNG</a>.
+          </p>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>2 · Run</h2>
+        <div class="row">
+          <div class="seg">
+            <button id="eng-tracear" class="seg-btn active">Tracear</button>
+            <button id="eng-mindar" class="seg-btn">MindAR</button>
+          </div>
+          <button id="btn-start" disabled>Start camera</button>
+        </div>
+        <p id="live" class="muted">
+          Hold the phone still on the marker for a fair jitter reading, then switch engines and repeat.
+        </p>
+        <div id="view"></div>
+      </section>
+
+      <section class="card">
+        <h2>3 · Results</h2>
+        <div class="row">
+          <button id="btn-reset" class="secondary">Reset stats</button>
+        </div>
+        <table id="results">
+          <thead>
+            <tr><th>metric</th><th>Tracear</th><th>MindAR</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <p class="muted">
+          Jitter = RMS deviation of the marker center (normalized to a 640 px frame) over a
+          trailing window, sampled only while the target is visible. Lower is better.
+        </p>
+      </section>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

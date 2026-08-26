@@ -11,7 +11,8 @@
   "scripts": {
     "test:core": "cd core && cargo test",
     "build:wasm": "wasm-pack build core/tracear-wasm --release --target web --no-pack --out-dir ../../packages/tracear/wasm",
-    "demo": "npm run dev --workspace tracear-demo"
+    "demo": "npm run dev --workspace tracear-demo",
+    "compare": "npm run dev --workspace tracear-compare"
   },
   "license": "MIT"
 }

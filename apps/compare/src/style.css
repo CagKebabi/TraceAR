@@ -1,0 +1,170 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, sans-serif;
+  background: #0f1115;
+  color: #e6e8ec;
+}
+
+main {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+h1 {
+  font-size: 1.35rem;
+}
+
+.vs {
+  color: #ff5c7a;
+  font-style: italic;
+}
+
+.tag {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: #7dd3a8;
+  border: 1px solid #2b4a3a;
+  border-radius: 999px;
+  padding: 2px 10px;
+  vertical-align: middle;
+}
+
+.card {
+  background: #171a21;
+  border: 1px solid #262b36;
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+
+.card h2 {
+  font-size: 1rem;
+  margin: 0 0 10px;
+}
+
+.row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+button {
+  background: #2a6df4;
+  border: none;
+  color: white;
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+button:disabled {
+  background: #333a48;
+  color: #7a8194;
+  cursor: not-allowed;
+}
+
+button.secondary {
+  background: #2c3242;
+}
+
+.seg {
+  display: flex;
+  border: 1px solid #2a3040;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.seg-btn {
+  border-radius: 0;
+  background: #1c2029;
+  color: #aab1c0;
+  padding: 10px 18px;
+}
+
+.seg-btn.active {
+  background: #2a6df4;
+  color: white;
+}
+
+.file-label {
+  font-size: 0.85rem;
+  color: #aab1c0;
+}
+
+.muted {
+  color: #8a91a3;
+  font-size: 0.85rem;
+}
+
+#marker-preview {
+  width: 140px;
+  height: 140px;
+  image-rendering: pixelated;
+  border: 1px solid #262b36;
+  border-radius: 8px;
+  background: white;
+}
+
+#marker-panel {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  margin-top: 10px;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+#view {
+  position: relative;
+  margin-top: 12px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #000;
+  min-height: 40px;
+}
+
+#view video {
+  width: 100%;
+  display: block;
+}
+
+#view canvas.overlay3d {
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+  z-index: 2;
+  pointer-events: none;
+}
+
+#results {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+  font-size: 0.9rem;
+}
+
+#results th,
+#results td {
+  border-bottom: 1px solid #262b36;
+  padding: 7px 10px;
+  text-align: left;
+}
+
+#results td.win {
+  color: #39d98a;
+  font-weight: 600;
+}
+
+a {
+  color: #7ab3ff;
+}
