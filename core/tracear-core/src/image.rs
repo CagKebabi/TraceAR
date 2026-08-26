@@ -98,37 +98,62 @@ impl GrayImage {
     }
 
     /// Separable box blur with edge replication (constant window size, so a
-    /// single normalization at the end — max radius 127).
+    /// single normalization at the end — max radius 127). Running-sum
+    /// implementation: O(1) per pixel regardless of radius, bit-identical to
+    /// the naive windowed sum (pure integer arithmetic).
     pub fn box_blur(&self, radius: usize) -> GrayImage {
         if radius == 0 {
             return self.clone();
         }
         assert!(radius <= 127);
-        let w = self.w as isize;
-        let h = self.h as isize;
+        let w = self.w;
+        let h = self.h;
         let r = radius as isize;
         let win = (2 * radius + 1) as u32;
-        let mut tmp = vec![0u16; self.w * self.h];
+        let clamp_x = |x: isize| x.clamp(0, w as isize - 1) as usize;
+        let clamp_y = |y: isize| y.clamp(0, h as isize - 1) as usize;
+
+        // Horizontal pass: sliding window sum per row.
+        let mut tmp = vec![0u16; w * h];
         for y in 0..h {
-            for x in 0..w {
-                let mut s: u32 = 0;
-                for dx in -r..=r {
-                    let xx = (x + dx).clamp(0, w - 1);
-                    s += self.data[(y * w + xx) as usize] as u32;
-                }
-                tmp[(y * w + x) as usize] = s as u16;
+            let row = &self.data[y * w..(y + 1) * w];
+            let orow = &mut tmp[y * w..(y + 1) * w];
+            let mut s: u32 = 0;
+            for i in -r..=r {
+                s += row[clamp_x(i)] as u32;
+            }
+            orow[0] = s as u16;
+            for x in 1..w {
+                s += row[clamp_x(x as isize + r)] as u32;
+                s -= row[clamp_x(x as isize - 1 - r)] as u32;
+                orow[x] = s as u16;
             }
         }
-        let mut out = GrayImage::new(self.w, self.h);
+
+        // Vertical pass: one running column-sum array swept down the image
+        // (row-major access — cache friendly).
+        let mut out = GrayImage::new(w, h);
         let norm = win * win;
-        for y in 0..h {
+        let half = norm / 2;
+        let mut acc = vec![0u32; w];
+        for i in -r..=r {
+            let src = &tmp[clamp_y(i) * w..clamp_y(i) * w + w];
             for x in 0..w {
-                let mut s: u32 = 0;
-                for dy in -r..=r {
-                    let yy = (y + dy).clamp(0, h - 1);
-                    s += tmp[(yy * w + x) as usize] as u32;
+                acc[x] += src[x] as u32;
+            }
+        }
+        for y in 0..h {
+            if y > 0 {
+                let add = &tmp[clamp_y(y as isize + r) * w..clamp_y(y as isize + r) * w + w];
+                let sub = &tmp[clamp_y(y as isize - 1 - r) * w..clamp_y(y as isize - 1 - r) * w + w];
+                for x in 0..w {
+                    acc[x] += add[x] as u32;
+                    acc[x] -= sub[x] as u32;
                 }
-                out.data[(y * w + x) as usize] = ((s + norm / 2) / norm) as u8;
+            }
+            let orow = &mut out.data[y * w..(y + 1) * w];
+            for x in 0..w {
+                orow[x] = ((acc[x] + half) / norm) as u8;
             }
         }
         out
@@ -256,6 +281,36 @@ mod tests {
         let img = GrayImage::from_vec(8, 8, vec![77; 64]);
         let b = img.box_blur(2);
         assert!(b.data.iter().all(|&v| v == 77));
+    }
+
+    /// The running-sum implementation must stay bit-identical to the naive
+    /// windowed sum — compiled markers depend on exact blur values.
+    #[test]
+    fn box_blur_matches_naive_reference() {
+        let mut img = GrayImage::new(23, 17); // odd sizes exercise the edges
+        for (i, p) in img.data.iter_mut().enumerate() {
+            *p = ((i * 37 + 11) % 256) as u8;
+        }
+        for radius in [1usize, 2, 3] {
+            let fast = img.box_blur(radius);
+            let r = radius as isize;
+            let win = (2 * radius + 1) as u32;
+            let norm = win * win;
+            for y in 0..img.h as isize {
+                for x in 0..img.w as isize {
+                    let mut s: u32 = 0;
+                    for dy in -r..=r {
+                        for dx in -r..=r {
+                            let xx = (x + dx).clamp(0, img.w as isize - 1) as usize;
+                            let yy = (y + dy).clamp(0, img.h as isize - 1) as usize;
+                            s += img.at(xx, yy) as u32;
+                        }
+                    }
+                    let expect = ((s + norm / 2) / norm) as u8;
+                    assert_eq!(fast.at(x as usize, y as usize), expect, "r={radius} at ({x},{y})");
+                }
+            }
+        }
     }
 
     #[test]

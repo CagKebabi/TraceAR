@@ -1,0 +1,5 @@
+# WASM SIMD: every supported browser (Chrome 91+, Safari 16.4+) has simd128;
+# LLVM auto-vectorizes the image loops with it. Applies only to the wasm
+# target — native test builds are unaffected.
+[target.wasm32-unknown-unknown]
+rustflags = ["-C", "target-feature=+simd128"]

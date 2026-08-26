@@ -53,6 +53,10 @@ pub fn compute(img: &GrayImage, cx: f32, cy: f32, angle: f32) -> Descriptor {
     let (sin, cos) = angle.sin_cos();
     let p = pattern();
     let mut desc = [0u64; 4];
+    debug_assert!(cx >= FEATURE_BORDER as f32 && cy >= FEATURE_BORDER as f32);
+    debug_assert!(cx < (img.w - FEATURE_BORDER) as f32 && cy < (img.h - FEATURE_BORDER) as f32);
+    let w = img.w;
+    let data: &[u8] = &img.data;
     for (i, &(px, py, qx, qy)) in p.pts.iter().enumerate() {
         let (px, py) = (px as f32, py as f32);
         let (qx, qy) = (qx as f32, qy as f32);
@@ -60,7 +64,12 @@ pub fn compute(img: &GrayImage, cx: f32, cy: f32, angle: f32) -> Descriptor {
         let ay = (cy + sin * px + cos * py).round() as usize;
         let bx = (cx + cos * qx - sin * qy).round() as usize;
         let by = (cy + sin * qx + cos * qy).round() as usize;
-        if img.at(ax, ay) < img.at(bx, by) {
+        // SAFETY: pattern points have |coord| <= 13, so rotated+rounded
+        // sample positions stay within 19 px of (cx, cy); the caller-
+        // guaranteed FEATURE_BORDER (20 px, debug-asserted above) keeps
+        // every ay*w+ax inside the buffer.
+        let (a, b) = unsafe { (*data.get_unchecked(ay * w + ax), *data.get_unchecked(by * w + bx)) };
+        if a < b {
             desc[i >> 6] |= 1u64 << (i & 63);
         }
     }

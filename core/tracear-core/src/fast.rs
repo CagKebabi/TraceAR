@@ -38,6 +38,7 @@ pub fn detect(img: &GrayImage, threshold: u8, border: usize) -> Vec<FastCorner> 
     }
     let t = threshold as i32;
     let w = img.w;
+    let data: &[u8] = &img.data;
     let offsets: [isize; 16] = {
         let mut o = [0isize; 16];
         let mut i = 0;
@@ -48,18 +49,24 @@ pub fn detect(img: &GrayImage, threshold: u8, border: usize) -> Vec<FastCorner> 
         o
     };
     let mut scores = vec![0f32; w * img.h];
+    let mut candidates: Vec<u32> = Vec::new();
 
     for y in b..img.h - b {
+        let row = y * w;
         for x in b..img.w - b {
-            let idx = y * w + x;
-            let p = img.data[idx] as i32;
+            let idx = row + x;
+            // SAFETY: b >= 3 and every CIRCLE offset stays within +-3 rows
+            // and columns, so idx + offsets[i] is in-bounds for all pixels
+            // at least `b` away from every image edge (the loop range).
+            let at = |i: usize| unsafe { *data.get_unchecked((idx as isize + offsets[i]) as usize) } as i32;
+            let p = unsafe { *data.get_unchecked(idx) } as i32;
 
             // Quick compass rejection: any 9-arc contains >= 2 of the 4
             // compass points (indices 0, 4, 8, 12).
             let mut nb = 0;
             let mut nd = 0;
-            for &ci in &[0usize, 4, 8, 12] {
-                let v = img.data[(idx as isize + offsets[ci]) as usize] as i32;
+            for ci in [0usize, 4, 8, 12] {
+                let v = at(ci);
                 if v >= p + t {
                     nb += 1;
                 } else if v <= p - t {
@@ -74,7 +81,7 @@ pub fn detect(img: &GrayImage, threshold: u8, border: usize) -> Vec<FastCorner> 
             let mut dark: u16 = 0;
             let mut vals = [0i32; 16];
             for i in 0..16 {
-                let v = img.data[(idx as isize + offsets[i]) as usize] as i32;
+                let v = at(i);
                 vals[i] = v;
                 if v >= p + t {
                     bright |= 1 << i;
@@ -99,33 +106,34 @@ pub fn detect(img: &GrayImage, threshold: u8, border: usize) -> Vec<FastCorner> 
             }
             let s = if is_b && is_d { sb.max(sd) } else if is_b { sb } else { sd };
             scores[idx] = s as f32 + 1.0; // +1 so a valid corner is always > 0
+            candidates.push(idx as u32);
         }
     }
 
+    // NMS only over actual corners (a few thousand) instead of re-scanning
+    // the whole score image. Same predicate, same tie-breaks.
     let mut out = Vec::new();
-    for y in b..img.h - b {
-        for x in b..img.w - b {
-            let s = scores[y * w + x];
-            if s <= 0.0 {
-                continue;
-            }
-            let mut is_max = true;
-            'nms: for dy in -1i32..=1 {
-                for dx in -1i32..=1 {
-                    if dx == 0 && dy == 0 {
-                        continue;
-                    }
-                    let ns = scores[(y as i32 + dy) as usize * w + (x as i32 + dx) as usize];
-                    // Ties broken toward the scan-order-first pixel.
-                    if ns > s || (ns == s && (dy < 0 || (dy == 0 && dx < 0))) {
-                        is_max = false;
-                        break 'nms;
-                    }
+    for &ci in &candidates {
+        let idx = ci as usize;
+        let s = scores[idx];
+        let x = idx % w;
+        let y = idx / w;
+        let mut is_max = true;
+        'nms: for dy in -1i32..=1 {
+            for dx in -1i32..=1 {
+                if dx == 0 && dy == 0 {
+                    continue;
+                }
+                let ns = scores[(y as i32 + dy) as usize * w + (x as i32 + dx) as usize];
+                // Ties broken toward the scan-order-first pixel.
+                if ns > s || (ns == s && (dy < 0 || (dy == 0 && dx < 0))) {
+                    is_max = false;
+                    break 'nms;
                 }
             }
-            if is_max {
-                out.push(FastCorner { x: x as u16, y: y as u16, score: s });
-            }
+        }
+        if is_max {
+            out.push(FastCorner { x: x as u16, y: y as u16, score: s });
         }
     }
     out

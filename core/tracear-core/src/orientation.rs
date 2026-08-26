@@ -26,13 +26,22 @@ pub fn compute(img: &GrayImage, cx: f32, cy: f32) -> f32 {
     let umax = u_max_table();
     let mut m01 = 0i64;
     let mut m10 = 0i64;
+    // Row-slice inner loops: one bounds check per row instead of per pixel,
+    // and LLVM can vectorize the running sums. Identical integer math:
+    // m10 row contribution = sum(i*val) - bound*sum(val), with u = i - bound.
     for v in -PATCH_RADIUS..=PATCH_RADIUS {
         let bound = umax[v.unsigned_abs() as usize];
-        for u in -bound..=bound {
-            let val = img.at((x0 + u) as usize, (y0 + v) as usize) as i64;
-            m10 += u as i64 * val;
-            m01 += v as i64 * val;
+        let start = (y0 + v) as usize * img.w + (x0 - bound) as usize;
+        let row = &img.data[start..start + (2 * bound + 1) as usize];
+        let mut sum = 0i64;
+        let mut wsum = 0i64;
+        for (i, &px) in row.iter().enumerate() {
+            let val = px as i64;
+            sum += val;
+            wsum += i as i64 * val;
         }
+        m10 += wsum - bound as i64 * sum;
+        m01 += v as i64 * sum;
     }
     (m01 as f32).atan2(m10 as f32)
 }

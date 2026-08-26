@@ -42,7 +42,7 @@ Measured (`cargo run --release --example bench_track`): static jitter
 **0.019 px**; motion **0 losses**, 499/500 tracked, 0.05 px mean corner
 error; track 3.45 ms vs detect 33.9 ms = **9.8×**. All targets exceeded.
 
-## M3 — Pose, filtering, three.js  🟡 code done, device check pending
+## M3 — Pose, filtering, three.js  ✅ done (2026-08-26)
 
 Zhang decomposition + LM refinement (previous pose seeds refinement to stay
 on the same planar-ambiguity branch), online focal self-calibration
@@ -57,10 +57,13 @@ device check: still phone → visually frozen model, fast motion → no swim/lag
 complaints at 30 fps.
 Status: session test asserts filtered reprojected jitter < 0.15 px (raw
 tracker jitter is already 0.017 px); pose recovery exact to 0.1 deg on
-synthetic homographies; focal estimator converges within 5%. Device check
-of the 3D demo pending.
+synthetic homographies; focal estimator converges within 5% (and measured
+the real device correctly through a portrait stream). Device iterations
+led to the speed-adaptive raw/filtered rendering blend + orientation-
+invariant focal ratio; device check passed ("frozen when still" achieved,
+motion glue acceptable — further polish rides on M4 real-device tuning).
 
-## M4 — Performance pass + real-device bench
+## M4 — Performance pass + real-device bench  🟡 in progress
 
 WASM SIMD in hot loops (grayscale, FAST, Hamming, LK), buffer reuse audit,
 optional WebGL grayscale path, recorded real-video regression set (user
@@ -69,6 +72,13 @@ records; runs in Node), side-by-side MindAR comparison page.
 **Accept:** metric table in ARCHITECTURE.md fully met on a mid-range Android
 device; MindAR comparison shows lower jitter + lower ms/frame on the same
 scenes.
+Progress (2026-08-26): profile-driven scalar pass — running-sum box blur
+(bit-identical, guarded by a naive-reference test), FAST candidate-list NMS
++ bounds-check elision, row-sliced orientation, BRIEF unchecked sampling —
+native detection 34 -> 25 ms; wasm32 builds with +simd128
+(core/.cargo/config.toml). Desktop-browser detection 41-58 -> ~21 ms warm
+(~2x). Remaining: MindAR comparison page, real-video set, device metric
+table.
 
 ## M5 — SDK polish + npm publish
 
