@@ -15,7 +15,11 @@ export interface InitMessage {
 
 export interface FrameMessage {
   type: "frame";
-  buf: ArrayBuffer;
+  /** RGBA pixels (canvas fallback path)… */
+  buf?: ArrayBuffer;
+  /** …or a GPU-side bitmap: the slow pixel readback then happens HERE in the
+   * worker instead of blocking the main thread's frame pump. */
+  bitmap?: ImageBitmap;
   width: number;
   height: number;
   timestamp: number;
@@ -49,6 +53,19 @@ const post = (msg: ReadyMessage | ResultMessage | ErrorMessage, transfer: Transf
   (self as unknown as Worker).postMessage(msg, transfer);
 
 let engine: Engine | null = null;
+let canvas: OffscreenCanvas | null = null;
+let ctx: OffscreenCanvasRenderingContext2D | null = null;
+
+function rgbaFromBitmap(bitmap: ImageBitmap, w: number, h: number): Uint8Array {
+  if (!canvas || canvas.width !== w || canvas.height !== h) {
+    canvas = new OffscreenCanvas(w, h);
+    ctx = canvas.getContext("2d", { willReadFrequently: true });
+  }
+  if (!ctx) throw new Error("tracear worker: no 2d context");
+  ctx.drawImage(bitmap, 0, 0, w, h);
+  bitmap.close();
+  return new Uint8Array(ctx.getImageData(0, 0, w, h).data.buffer);
+}
 
 self.onmessage = async (ev: MessageEvent<InitMessage | FrameMessage>) => {
   const msg = ev.data;
@@ -66,9 +83,9 @@ self.onmessage = async (ev: MessageEvent<InitMessage | FrameMessage>) => {
     } else if (msg.type === "frame") {
       if (!engine) return;
       const t0 = performance.now();
+      const px = msg.bitmap ? rgbaFromBitmap(msg.bitmap, msg.width, msg.height) : new Uint8Array(msg.buf!);
       // Live frames run the stateful detect<->track pipeline; one-shot
       // requests (detectImage) must not disturb tracking state.
-      const px = new Uint8Array(msg.buf);
       const data =
         msg.requestId !== undefined
           ? engine.detect_rgba(px, msg.width, msg.height)

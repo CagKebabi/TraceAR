@@ -370,23 +370,50 @@ export class Tracear {
     }
   }
 
+  /** GPU bitmap path until proven unsupported, then canvas readback. */
+  private useBitmapPath = typeof createImageBitmap === "function" && typeof OffscreenCanvas === "function";
+
   private processFrame(): void {
     if (!this.running) return;
     // Drop frames while the worker is busy — never queue.
-    if (!this.inflight && this.ctx && this.video.readyState >= 2) {
-      this.ctx.drawImage(this.video, 0, 0, this.processW, this.processH);
-      const img = this.ctx.getImageData(0, 0, this.processW, this.processH);
-      this.inflight = true;
-      this.worker.postMessage(
-        {
-          type: "frame",
-          buf: img.data.buffer,
-          width: this.processW,
-          height: this.processH,
-          timestamp: performance.now(),
-        },
-        [img.data.buffer],
-      );
+    if (!this.inflight && this.video.readyState >= 2) {
+      const timestamp = performance.now();
+      if (this.useBitmapPath) {
+        // createImageBitmap(video, {resize}) stays on the GPU and returns in
+        // ~1 ms; the expensive pixel readback happens in the worker, so the
+        // frame pump is not serialized on the main thread (on phones a main-
+        // thread getImageData costs tens of ms and halves the update rate).
+        this.inflight = true;
+        createImageBitmap(this.video, {
+          resizeWidth: this.processW,
+          resizeHeight: this.processH,
+        }).then(
+          (bitmap) => {
+            if (!this.running) {
+              bitmap.close();
+              this.inflight = false;
+              return;
+            }
+            this.worker.postMessage(
+              { type: "frame", bitmap, width: this.processW, height: this.processH, timestamp },
+              [bitmap],
+            );
+          },
+          () => {
+            // resize options or video source unsupported — permanent fallback
+            this.useBitmapPath = false;
+            this.inflight = false;
+          },
+        );
+      } else if (this.ctx) {
+        this.ctx.drawImage(this.video, 0, 0, this.processW, this.processH);
+        const img = this.ctx.getImageData(0, 0, this.processW, this.processH);
+        this.inflight = true;
+        this.worker.postMessage(
+          { type: "frame", buf: img.data.buffer, width: this.processW, height: this.processH, timestamp },
+          [img.data.buffer],
+        );
+      }
     }
     this.scheduleFrame();
   }

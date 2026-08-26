@@ -66,7 +66,13 @@ const resultsBody = document.querySelector<HTMLTableSectionElement>("#results tb
  */
 class JitterMeter {
   private buf: [number, number][] = [];
+  private lastPush = 0;
   push(x: number, y: number): void {
+    // A gap (target lost / engine re-acquiring) breaks sample continuity —
+    // the jump would read as a huge second difference. Start fresh instead.
+    const now = performance.now();
+    if (now - this.lastPush > 250) this.buf = [];
+    this.lastPush = now;
     this.buf.push([x, y]);
     if (this.buf.length > 90) this.buf.shift();
   }
