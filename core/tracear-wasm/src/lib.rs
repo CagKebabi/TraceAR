@@ -3,7 +3,8 @@
 
 use tracear_core::image::GrayImage;
 use tracear_core::marker::{compile_marker, CompileConfig, CompiledMarker};
-use tracear_core::pipeline::{MarkerStatus, Pipeline, PipelineResult};
+use tracear_core::pipeline::MarkerStatus;
+use tracear_core::session::{Session, SessionConfig, SessionResult};
 use wasm_bindgen::prelude::*;
 
 fn rgba_to_gray(rgba: &[u8], w: usize, h: usize) -> Result<GrayImage, JsValue> {
@@ -20,17 +21,25 @@ fn rgba_to_gray(rgba: &[u8], w: usize, h: usize) -> Result<GrayImage, JsValue> {
 }
 
 /// Values per marker in a result buffer:
-/// [status (0 not found / 1 detected / 2 tracked), h00..h22, n_good, n_total, quality]
-pub const RESULT_STRIDE: usize = 13;
+/// [status (0 not found / 1 detected / 2 tracked),
+///  h00..h22 (marker px -> frame px),
+///  nGood, nTotal, quality,
+///  poseValid,
+///  qx, qy, qz, qw            (marker-object -> OpenCV-camera rotation),
+///  tx, ty, tz                (translation, physical units),
+///  vx, vy, vz                (filtered linear velocity, units/s),
+///  wx, wy, wz                (body-frame angular velocity, rad/s),
+///  focalRatio                (current f / frame_width estimate)]
+pub const RESULT_STRIDE: usize = 28;
 
-fn encode_results(results: &[PipelineResult], out: &mut Vec<f64>) {
+fn encode_results(results: &[SessionResult], focal_ratio: f64, out: &mut Vec<f64>) {
     for r in results {
-        out.push(match r.status {
+        out.push(match r.tracking.status {
             MarkerStatus::NotFound => 0.0,
             MarkerStatus::Detected => 1.0,
             MarkerStatus::Tracked => 2.0,
         });
-        match &r.homography {
+        match &r.tracking.homography {
             Some(h) => {
                 for row in 0..3 {
                     for col in 0..3 {
@@ -40,15 +49,27 @@ fn encode_results(results: &[PipelineResult], out: &mut Vec<f64>) {
             }
             None => out.extend_from_slice(&[0.0; 9]),
         }
-        out.push(r.n_good as f64);
-        out.push(r.n_total as f64);
-        out.push(r.quality as f64);
+        out.push(r.tracking.n_good as f64);
+        out.push(r.tracking.n_total as f64);
+        out.push(r.tracking.quality as f64);
+        match &r.pose {
+            Some(p) => {
+                out.push(1.0);
+                let q = p.rotation.quaternion();
+                out.extend_from_slice(&[q.i, q.j, q.k, q.w]);
+                out.extend_from_slice(&[p.translation.x, p.translation.y, p.translation.z]);
+                out.extend_from_slice(&[p.velocity.x, p.velocity.y, p.velocity.z]);
+                out.extend_from_slice(&[p.angular_velocity.x, p.angular_velocity.y, p.angular_velocity.z]);
+            }
+            None => out.extend_from_slice(&[0.0; 14]),
+        }
+        out.push(focal_ratio);
     }
 }
 
 #[wasm_bindgen]
 pub struct Engine {
-    pipeline: Pipeline,
+    session: Session,
 }
 
 impl Default for Engine {
@@ -61,51 +82,53 @@ impl Default for Engine {
 impl Engine {
     #[wasm_bindgen(constructor)]
     pub fn new() -> Engine {
-        Engine { pipeline: Pipeline::new() }
+        Engine { session: Session::new(SessionConfig::default()) }
     }
 
-    /// Add a compiled `.tracear` marker; returns its index.
-    pub fn add_marker(&mut self, bytes: &[u8]) -> Result<u32, JsValue> {
+    /// Add a compiled `.tracear` marker with its physical width (meters, or
+    /// any unit — poses come out in the same unit; pass 1.0 if unknown).
+    /// Returns the marker index.
+    pub fn add_marker(&mut self, bytes: &[u8], physical_width: f64) -> Result<u32, JsValue> {
         let m = CompiledMarker::from_bytes(bytes).map_err(|e| JsValue::from_str(&e))?;
-        Ok(self.pipeline.add_marker(m) as u32)
+        Ok(self.session.add_marker(m, physical_width) as u32)
     }
 
     pub fn marker_count(&self) -> u32 {
-        self.pipeline.marker_count() as u32
+        self.session.marker_count() as u32
     }
 
     /// Marker native size as [width, height] for overlay drawing.
     pub fn marker_size(&self, index: u32) -> Vec<u32> {
-        match self.pipeline.marker(index as usize) {
+        match self.session.marker(index as usize) {
             Some(m) => vec![m.width, m.height],
             None => vec![],
         }
     }
 
-    /// Drop all tracking state (e.g. when the camera stops).
+    /// Drop all tracking/filter state (e.g. when the camera stops).
     pub fn reset(&mut self) {
-        self.pipeline.reset();
+        self.session.reset();
     }
 
-    /// Stateful detect<->track processing of a live RGBA frame. `timestamp`
-    /// is the frame's capture time in ms (performance.now() domain) — used to
-    /// scale motion prediction to the real, non-uniform frame spacing.
-    /// Returns RESULT_STRIDE f64 values per marker (see constant above);
-    /// homographies map marker px -> frame px.
+    /// Stateful processing of a live RGBA frame: detect<->track, pose
+    /// estimation, SE(3) filtering. `timestamp` is the frame's capture time
+    /// in ms (performance.now() domain). Returns RESULT_STRIDE f64 values
+    /// per marker (see constant above).
     pub fn process_rgba(&mut self, rgba: &[u8], width: u32, height: u32, timestamp: f64) -> Result<Vec<f64>, JsValue> {
         let gray = rgba_to_gray(rgba, width as usize, height as usize)?;
-        let results = self.pipeline.process(&gray, timestamp);
+        let results = self.session.process(&gray, timestamp);
         let mut out = Vec::with_capacity(results.len() * RESULT_STRIDE);
-        encode_results(&results, &mut out);
+        encode_results(&results, self.session.focal_ratio(), &mut out);
         Ok(out)
     }
 
-    /// Stateless one-shot detection (detectImage API). Same result layout.
+    /// Stateless one-shot detection (detectImage API): raw un-filtered pose,
+    /// zero velocities. Same result layout.
     pub fn detect_rgba(&self, rgba: &[u8], width: u32, height: u32) -> Result<Vec<f64>, JsValue> {
         let gray = rgba_to_gray(rgba, width as usize, height as usize)?;
-        let results = self.pipeline.detect_only(&gray);
+        let results = self.session.detect_only(&gray);
         let mut out = Vec::with_capacity(results.len() * RESULT_STRIDE);
-        encode_results(&results, &mut out);
+        encode_results(&results, self.session.focal_ratio(), &mut out);
         Ok(out)
     }
 }

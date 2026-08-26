@@ -6,25 +6,56 @@
  * API; `poseAt` stays null until M3.
  */
 import { Emitter } from "./events";
+import { mat4FromPose, quatFromScaledAxis, quatMultiply, type Quat, type Vec3 } from "./math";
 import type { ReadyMessage, ResultMessage, ErrorMessage } from "./worker";
 
 export type Homography = Float64Array;
 
 /** Values per marker in a worker result (mirrors the wasm crate):
- * [status (0/1/2), h00..h22, nGood, nTotal, quality] */
-const RESULT_STRIDE = 13;
+ * [status (0/1/2), h00..h22, nGood, nTotal, quality,
+ *  poseValid, qx,qy,qz,qw, tx,ty,tz, vx,vy,vz, wx,wy,wz, focalRatio] */
+const RESULT_STRIDE = 28;
 
 export interface TracearConfig {
   /** Element the managed <video> is appended to; position it yourself (e.g. relative). */
   container: HTMLElement;
   /** Compiled `.tracear` targets: URLs or raw bytes. */
   targets: (string | ArrayBuffer | Uint8Array)[];
+  /** Physical width of each target in meters (or any unit — poses come out
+   * in the same unit). Defaults to 1 per target. */
+  targetWidthsMeters?: number[];
   /** Long-side cap for the processed frame, default 640. */
   maxProcessSize?: number;
   /** Consecutive detection misses before `targetLost`, default 8. */
   lostAfterMisses?: number;
   /** Extra getUserMedia video constraints (merged over the defaults). */
   videoConstraints?: MediaTrackConstraints;
+}
+
+/**
+ * Filtered 6DoF pose. Conventions: object frame has its origin at the marker
+ * center, X right, Y up, Z out of the marker face; camera frame is OpenCV
+ * (X right, Y down, Z forward). Renderer adapters (tracear/three) convert.
+ */
+export interface PoseData {
+  /** Object -> camera translation (physical units). */
+  position: Vec3;
+  /** Object -> camera rotation quaternion [x, y, z, w]. */
+  quaternion: Quat;
+  /** Filtered linear velocity, units/s. */
+  velocity: Vec3;
+  /** Body-frame angular velocity, rad/s: q(t+dt) ~= q * exp(w*dt). */
+  angularVelocity: Vec3;
+}
+
+export interface CameraIntrinsics {
+  fx: number;
+  fy: number;
+  cx: number;
+  cy: number;
+  /** Process-frame size these intrinsics are expressed in. */
+  width: number;
+  height: number;
 }
 
 export interface UpdateEvent {
@@ -42,6 +73,8 @@ export interface UpdateEvent {
   matches: number;
   /** 0..1 confidence (patch survival x NCC while tracking). */
   quality: number;
+  /** Filtered 6DoF pose (undefined if pose estimation failed this frame). */
+  pose?: PoseData;
   /** Frame capture time (performance.now() domain). */
   timestamp: number;
   processWidth: number;
@@ -83,11 +116,16 @@ export class Tracear {
   private processH = 0;
   private nextRequestId = 1;
   private pending = new Map<number, (r: ResultMessage) => void>();
+  private lastPoses: ({ pose: PoseData; timestamp: number } | null)[] = [];
+  private focalRatio = 0;
+  private lastProcessW = 0;
+  private lastProcessH = 0;
 
   private constructor(config: TracearConfig, worker: Worker, markerSizes: [number, number][]) {
     this.config = { maxProcessSize: 640, lostAfterMisses: 8, ...config };
     this.worker = worker;
     this.targets = markerSizes.map(([width, height]) => ({ found: false, misses: 0, width, height }));
+    this.lastPoses = markerSizes.map(() => null);
     this.video = document.createElement("video");
     this.video.playsInline = true;
     this.video.muted = true;
@@ -132,7 +170,8 @@ export class Tracear {
       };
       worker.onerror = (e) => reject(new Error(`tracear: worker failed to load: ${e.message}`));
     });
-    worker.postMessage({ type: "init", markers }, markers);
+    const widths = config.targets.map((_, i) => config.targetWidthsMeters?.[i] ?? 1.0);
+    worker.postMessage({ type: "init", markers, widths }, markers);
     const readyMsg = await ready;
     return new Tracear(config, worker, readyMsg.markerSizes);
   }
@@ -197,9 +236,44 @@ export class Tracear {
     this.emitter.clear();
   }
 
-  /** Filtered pose at a render timestamp — lands in M3; null until then. */
-  poseAt(_index: number, _timestamp: number): Float32Array | null {
-    return null;
+  /**
+   * Filtered pose extrapolated to a render timestamp (performance.now()
+   * domain) — the render-time prediction that cancels filter/pipeline
+   * latency. Returns a column-major 4x4 marker-object -> OpenCV-camera
+   * matrix, or null while the target is not tracked. `tracear/three`
+   * consumes this and handles axis conversion.
+   */
+  poseAt(index: number, timestamp: number): Float32Array | null {
+    const lp = this.lastPoses[index];
+    if (!lp) return null;
+    const { pose } = lp;
+    const dt = Math.min(Math.max((timestamp - lp.timestamp) / 1000, 0), 0.1);
+    const p: Vec3 = [
+      pose.position[0] + pose.velocity[0] * dt,
+      pose.position[1] + pose.velocity[1] * dt,
+      pose.position[2] + pose.velocity[2] * dt,
+    ];
+    const dq = quatFromScaledAxis([
+      pose.angularVelocity[0] * dt,
+      pose.angularVelocity[1] * dt,
+      pose.angularVelocity[2] * dt,
+    ]);
+    const q = quatMultiply(pose.quaternion, dq);
+    return mat4FromPose(q, p);
+  }
+
+  /** Latest camera intrinsics estimate (null before the first result). */
+  intrinsics(): CameraIntrinsics | null {
+    if (!this.focalRatio || !this.lastProcessW) return null;
+    const f = this.focalRatio * this.lastProcessW;
+    return {
+      fx: f,
+      fy: f,
+      cx: this.lastProcessW / 2,
+      cy: this.lastProcessH / 2,
+      width: this.lastProcessW,
+      height: this.lastProcessH,
+    };
   }
 
   /**
@@ -276,6 +350,15 @@ export class Tracear {
     const status = d[base];
     if (status === 0) return null;
     const state = this.targets[index];
+    let pose: PoseData | undefined;
+    if (d[base + 13] === 1.0) {
+      pose = {
+        quaternion: [d[base + 14], d[base + 15], d[base + 16], d[base + 17]],
+        position: [d[base + 18], d[base + 19], d[base + 20]],
+        velocity: [d[base + 21], d[base + 22], d[base + 23]],
+        angularVelocity: [d[base + 24], d[base + 25], d[base + 26]],
+      };
+    }
     return {
       index,
       homography: d.slice(base + 1, base + 10),
@@ -285,6 +368,7 @@ export class Tracear {
       inliers: d[base + 10],
       matches: d[base + 11],
       quality: d[base + 12],
+      pose,
       timestamp: msg.timestamp,
       processWidth: msg.width,
       processHeight: msg.height,
@@ -294,10 +378,16 @@ export class Tracear {
 
   private onResult(msg: ResultMessage): void {
     this.inflight = false;
+    this.lastProcessW = msg.width;
+    this.lastProcessH = msg.height;
     for (let i = 0; i < this.targets.length; i++) {
       const state = this.targets[i];
       const update = this.parseUpdate(msg, i);
       if (update) {
+        this.focalRatio = msg.data[i * RESULT_STRIDE + 27];
+        if (update.pose) {
+          this.lastPoses[i] = { pose: update.pose, timestamp: msg.timestamp };
+        }
         state.misses = 0;
         if (!state.found) {
           state.found = true;
@@ -309,6 +399,7 @@ export class Tracear {
         if (state.misses >= this.config.lostAfterMisses) {
           state.found = false;
           state.misses = 0;
+          this.lastPoses[i] = null;
           this.emitter.emit("targetLost", { index: i });
         }
       }

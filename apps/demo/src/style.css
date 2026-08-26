@@ -122,6 +122,15 @@ button.secondary {
   pointer-events: none;
 }
 
+.overlay3d {
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+  z-index: 2;
+  pointer-events: none;
+}
+
 a {
   color: #7ab3ff;
 }

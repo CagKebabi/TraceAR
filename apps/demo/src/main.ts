@@ -1,5 +1,7 @@
+import * as THREE from "three";
 import { Tracear, type UpdateEvent } from "tracear";
 import { compileImage } from "tracear/compiler";
+import { TracearThree } from "tracear/three";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -19,6 +21,52 @@ let markerBytes: Uint8Array | null = null;
 let markerSource: CanvasImageSource | null = null;
 let tracker: Tracear | null = null;
 let clearTimer: number | null = null;
+let three: { renderer: THREE.WebGLRenderer; scene: THREE.Scene; t3: TracearThree } | null = null;
+
+/** Transparent WebGL layer over the video: a cube + axes anchored to the marker. */
+function setupThree(t: Tracear): void {
+  if (three) {
+    three.renderer.dispose();
+    three.renderer.domElement.remove();
+  }
+  const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+  renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.domElement.className = "overlay3d";
+  container.appendChild(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+  const dir = new THREE.DirectionalLight(0xffffff, 1.2);
+  dir.position.set(0.5, 1, 1);
+  scene.add(dir);
+
+  const t3 = new TracearThree(t);
+  const anchor = t3.anchor(0);
+  // Marker width = 1 unit; a cube sitting on the marker center.
+  const cube = new THREE.Mesh(
+    new THREE.BoxGeometry(0.3, 0.3, 0.3),
+    new THREE.MeshStandardMaterial({ color: 0x2a6df4, roughness: 0.35, metalness: 0.1 }),
+  );
+  cube.position.z = 0.15; // object frame: Z points out of the marker
+  anchor.add(cube);
+  anchor.add(new THREE.AxesHelper(0.5));
+  scene.add(anchor);
+
+  three = { renderer, scene, t3 };
+  const loop = () => {
+    if (!three) return;
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+    const canvas = three.renderer.domElement;
+    if (canvas.width !== Math.round(w * devicePixelRatio) || canvas.height !== Math.round(h * devicePixelRatio)) {
+      three.renderer.setSize(w, h, false);
+    }
+    three.t3.update();
+    three.renderer.render(three.scene, three.t3.camera);
+    requestAnimationFrame(loop);
+  };
+  requestAnimationFrame(loop);
+}
 
 /** Deterministic corner-rich pattern — same idea as the core's synthetic texture. */
 function drawSampleMarker(size = 512): HTMLCanvasElement {
@@ -193,6 +241,7 @@ btnStart.onclick = async () => {
     tracker.on("targetFound", () => (stats.textContent = "target found"));
     tracker.on("targetLost", () => (stats.textContent = "target lost — searching…"));
     tracker.on("error", ({ message }) => (stats.textContent = `error: ${message}`));
+    setupThree(tracker);
     await tracker.start();
     btnStart.textContent = "Camera running";
     stats.textContent = "searching for marker…";

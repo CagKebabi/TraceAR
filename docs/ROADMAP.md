@@ -42,14 +42,23 @@ Measured (`cargo run --release --example bench_track`): static jitter
 **0.019 px**; motion **0 losses**, 499/500 tracked, 0.05 px mean corner
 error; track 3.45 ms vs detect 33.9 ms = **9.8×**. All targets exceeded.
 
-## M3 — Pose, filtering, three.js
+## M3 — Pose, filtering, three.js  🟡 code done, device check pending
 
-IPPE + LM refinement, focal estimation, One Euro on SE(3) with render-time
-prediction, `tracear/three` adapter, 3D demo.
+Zhang decomposition + LM refinement (previous pose seeds refinement to stay
+on the same planar-ambiguity branch), online focal self-calibration
+(median-filtered Zhang constraints, typical-FOV default), One Euro on SE(3)
+(zero-mean-derivative variant, quaternion-domain rotation filtering) with
+velocity outputs consumed by `poseAt()` render-time prediction,
+`tracear/three` adapter (intrinsics-driven projection, per-target anchors),
+3D demo (cube + axes).
 
 **Accept:** bench jitter (filtered, static) < 0.15 px reprojected; visual
 device check: still phone → visually frozen model, fast motion → no swim/lag
 complaints at 30 fps.
+Status: session test asserts filtered reprojected jitter < 0.15 px (raw
+tracker jitter is already 0.017 px); pose recovery exact to 0.1 deg on
+synthetic homographies; focal estimator converges within 5%. Device check
+of the 3D demo pending.
 
 ## M4 — Performance pass + real-device bench
 

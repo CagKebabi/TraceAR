@@ -9,6 +9,7 @@
     "preview": "vite preview --host"
   },
   "dependencies": {
+    "three": "^0.170.0",
     "tracear": "*"
   },
   "devDependencies": {

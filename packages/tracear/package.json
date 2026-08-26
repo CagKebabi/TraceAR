@@ -12,6 +12,18 @@
   },
   "files": ["dist"],
   "scripts": {
-    "build": "echo 'build wiring lands in M1 (wasm-pack + tsup)'"
+    "build": "echo 'build wiring lands in M5 (wasm-pack + tsup)'"
+  },
+  "peerDependencies": {
+    "three": ">=0.150.0"
+  },
+  "peerDependenciesMeta": {
+    "three": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/three": "^0.170.0",
+    "three": "^0.170.0"
   }
 }

@@ -9,6 +9,8 @@ import init, { Engine } from "../wasm/tracear_wasm.js";
 export interface InitMessage {
   type: "init";
   markers: ArrayBuffer[];
+  /** Physical width per marker (meters or any unit; poses use the same unit). */
+  widths: number[];
 }
 
 export interface FrameMessage {
@@ -55,8 +57,8 @@ self.onmessage = async (ev: MessageEvent<InitMessage | FrameMessage>) => {
       await init();
       engine = new Engine();
       const markerSizes: [number, number][] = [];
-      for (const m of msg.markers) {
-        const idx = engine.add_marker(new Uint8Array(m));
+      for (let i = 0; i < msg.markers.length; i++) {
+        const idx = engine.add_marker(new Uint8Array(msg.markers[i]), msg.widths[i] ?? 1.0);
         const size = engine.marker_size(idx);
         markerSizes.push([size[0], size[1]]);
       }

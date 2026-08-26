@@ -22,4 +22,7 @@ pub mod marker;
 pub mod detector;
 pub mod tracker;
 pub mod pipeline;
+pub mod pose;
+pub mod filter;
+pub mod session;
 pub mod synthetic;
