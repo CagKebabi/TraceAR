@@ -31,6 +31,16 @@ let compileBoost = false;
 type EngineName = "tracear" | "mindar";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+
+// Phone debugging without devtools: surface any uncaught error on the page.
+window.addEventListener("error", (e) => {
+  const live = document.getElementById("live");
+  if (live) live.textContent = `error: ${e.message}`;
+});
+window.addEventListener("unhandledrejection", (e) => {
+  const live = document.getElementById("live");
+  if (live) live.textContent = `error: ${e.reason instanceof Error ? e.reason.message : e.reason}`;
+});
 const btnSample = $<HTMLButtonElement>("btn-sample");
 const fileInput = $<HTMLInputElement>("file-input");
 const markerStatus = $<HTMLParagraphElement>("marker-status");
@@ -264,6 +274,8 @@ let selected: EngineName = "tracear";
 const jitter = new JitterMeter();
 let statsTimer: number | null = null;
 let runStart = 0;
+/** Sticky diagnostic message; suppresses the periodic stats line. */
+let warnMsg: string | null = null;
 
 function beginStatsLoop(name: EngineName, extra: () => string): void {
   runStart = performance.now();
@@ -273,6 +285,11 @@ function beginStatsLoop(name: EngineName, extra: () => string): void {
     st.runSeconds = (performance.now() - runStart) / 1000;
     const r = jitter.rms();
     if (r !== null) st.jitterSnapshots.push(r);
+    if (warnMsg) {
+      live.textContent = warnMsg;
+      renderResults();
+      return;
+    }
     live.textContent =
       `${name.toUpperCase()} · jitter ${r === null ? "…" : r.toFixed(3) + " px"} · ` +
       `${st.runSeconds > 1 ? (st.updateCount / st.runSeconds).toFixed(1) : "…"} updates/s${extra()}`;
@@ -298,11 +315,14 @@ async function startTracear(): Promise<RunningEngine> {
   anchor.add(anchorContent());
   scene.add(anchor);
 
-  let lastMs = 0;
+  const msWindow: number[] = [];
+  let mode = "…";
   tracker.on("update", (e: UpdateEvent) => {
     stats.tracear.updateCount++;
     stats.tracear.workerMs.push(e.workerMs);
-    lastMs = e.workerMs;
+    msWindow.push(e.workerMs);
+    if (msWindow.length > 30) msWindow.shift();
+    mode = e.tracking ? "track" : "detect";
     // Marker center through the homography, normalized to a 640px frame.
     const h = e.homography;
     const [mx, my] = [e.markerWidth / 2, e.markerHeight / 2];
@@ -329,7 +349,10 @@ async function startTracear(): Promise<RunningEngine> {
   raf = requestAnimationFrame(loop);
 
   await tracker.start();
-  beginStatsLoop("tracear", () => ` · CV ${lastMs.toFixed(1)} ms`);
+  beginStatsLoop("tracear", () => {
+    const avg = msWindow.length ? msWindow.reduce((a, b) => a + b, 0) / msWindow.length : 0;
+    return ` · ${mode} ${avg.toFixed(1)} ms`;
+  });
   return {
     name: "tracear",
     stop() {
@@ -343,6 +366,7 @@ async function startTracear(): Promise<RunningEngine> {
 }
 
 async function startMindar(): Promise<RunningEngine> {
+  live.textContent = "loading MindAR engine…";
   const { MindARThree } = await import("mind-ar/dist/mindar-image-three.prod.js");
   // Give the container an explicit size (MindAR positions itself absolutely).
   view.style.height = `${Math.round(view.clientWidth * 0.75)}px`;
@@ -358,6 +382,7 @@ async function startMindar(): Promise<RunningEngine> {
   const anchor = mindar.addAnchor(0);
   anchor.group.add(anchorContent());
 
+  live.textContent = "starting MindAR camera — the FIRST start compiles tfjs shaders and can take 10-20 s on a black screen, hang on…";
   await mindar.start();
   // Match the container to the camera aspect so "cover" doesn't crop.
   const fitHeight = () => {
@@ -367,6 +392,14 @@ async function startMindar(): Promise<RunningEngine> {
   };
   mindar.video.addEventListener("loadedmetadata", fitHeight);
   fitHeight();
+  // Remote-debug watchdog: report what actually failed instead of a black box.
+  const watchdog = window.setTimeout(() => {
+    if (!mindar.video.videoWidth) {
+      warnMsg =
+        `MindAR: no camera frames after 10 s (video readyState ${mindar.video.readyState}, ` +
+        `srcObject ${mindar.video.srcObject ? "set" : "missing"})`;
+    }
+  }, 10000);
 
   const pos = new THREE.Vector3();
   let lastX = NaN;
@@ -394,6 +427,7 @@ async function startMindar(): Promise<RunningEngine> {
   return {
     name: "mindar",
     stop() {
+      clearTimeout(watchdog);
       endStatsLoop();
       renderer.setAnimationLoop(null);
       try {
@@ -421,6 +455,7 @@ function selectEngine(name: EngineName): void {
 async function restart(): Promise<void> {
   btnStart.disabled = true;
   btnStart.textContent = "Starting…";
+  warnMsg = null;
   if (running) {
     await running.stop();
     running = null;
