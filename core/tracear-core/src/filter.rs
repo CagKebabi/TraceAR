@@ -26,11 +26,12 @@ pub struct OneEuro {
     pub beta: f64,
     pub d_cutoff: f64,
     state: Option<(f64, f64, f64)>, // (x_hat, dx_hat, x_raw_prev)
+    last_cutoff: f64,
 }
 
 impl OneEuro {
     pub fn new(min_cutoff: f64, beta: f64, d_cutoff: f64) -> Self {
-        Self { min_cutoff, beta, d_cutoff, state: None }
+        Self { min_cutoff, beta, d_cutoff, state: None, last_cutoff: min_cutoff }
     }
 
     /// Returns (filtered value, filtered raw-signal derivative per second).
@@ -38,6 +39,7 @@ impl OneEuro {
         match self.state {
             None => {
                 self.state = Some((x, 0.0, x));
+                self.last_cutoff = self.min_cutoff;
                 (x, 0.0)
             }
             Some((x_hat_prev, dx_prev, x_raw_prev)) => {
@@ -47,13 +49,21 @@ impl OneEuro {
                 let cutoff = self.min_cutoff + self.beta * dx_hat.abs();
                 let x_hat = x_hat_prev + smoothing_factor(cutoff, dt) * (x - x_hat_prev);
                 self.state = Some((x_hat, dx_hat, x));
+                self.last_cutoff = cutoff;
                 (x_hat, dx_hat)
             }
         }
     }
 
+    /// A first-order low-pass at cutoff fc delays the signal by ~1/(2*pi*fc)
+    /// seconds — the group delay the render-time predictor must add back.
+    pub fn lag_seconds(&self) -> f64 {
+        1.0 / (std::f64::consts::TAU * self.last_cutoff.max(1e-3))
+    }
+
     pub fn reset(&mut self) {
         self.state = None;
+        self.last_cutoff = self.min_cutoff;
     }
 }
 
@@ -68,15 +78,15 @@ pub struct PoseFilterConfig {
 
 impl Default for PoseFilterConfig {
     fn default() -> Self {
-        // Tuned for AR: strong suppression when still (min_cutoff), cutoff
-        // opening quickly with speed (beta) so motion stays responsive. The
-        // remaining phase lag under motion is cancelled by render-time
-        // prediction (poseAt), not by loosening the filter.
+        // Tuned for AR: aggressive suppression when still (low min_cutoff —
+        // affordable because the filter reports its own group delay and the
+        // render-time predictor adds it back), cutoff opening quickly with
+        // speed (beta) so motion stays responsive.
         Self {
-            pos_min_cutoff: 1.0,
-            pos_beta: 1.0,
-            rot_min_cutoff: 1.0,
-            rot_beta: 1.0,
+            pos_min_cutoff: 0.6,
+            pos_beta: 1.5,
+            rot_min_cutoff: 0.6,
+            rot_beta: 2.0,
             d_cutoff: 1.0,
         }
     }
@@ -90,6 +100,11 @@ pub struct FilteredPose {
     pub velocity: Vector3<f64>,
     /// Body-frame rad/s of the filtered rotation.
     pub angular_velocity: Vector3<f64>,
+    /// Group delay of the translation filter (s) — the predictor extrapolates
+    /// over (render latency + this) to place content where the target IS.
+    pub pos_lag_s: f64,
+    /// Group delay of the rotation filter (s).
+    pub rot_lag_s: f64,
 }
 
 pub struct PoseFilter {
@@ -141,6 +156,7 @@ impl PoseFilter {
             v[i] = dx_hat;
         }
 
+        let mut rot_cutoff = self.cfg.rot_min_cutoff;
         let (q_hat, omega) = match self.rot {
             None => {
                 self.rot = Some((pose.rotation, Vector3::zeros(), pose.rotation));
@@ -162,6 +178,7 @@ impl PoseFilter {
                 let a_d = smoothing_factor(self.cfg.d_cutoff, dt);
                 let omega_hat = omega_prev + (omega_inst - omega_prev) * a_d;
                 let cutoff = self.cfg.rot_min_cutoff + self.cfg.rot_beta * omega_hat.norm();
+                rot_cutoff = cutoff;
                 let a = smoothing_factor(cutoff, dt);
                 let q_next = q_prev_hat.slerp(&q_new, a);
                 self.rot = Some((q_next, omega_hat, q_new));
@@ -169,7 +186,16 @@ impl PoseFilter {
             }
         };
 
-        FilteredPose { rotation: q_hat, translation: p, velocity: v, angular_velocity: omega }
+        let pos_lag_s = self.x.iter().map(|f| f.lag_seconds()).sum::<f64>() / 3.0;
+        let rot_lag_s = 1.0 / (std::f64::consts::TAU * rot_cutoff.max(1e-3));
+        FilteredPose {
+            rotation: q_hat,
+            translation: p,
+            velocity: v,
+            angular_velocity: omega,
+            pos_lag_s,
+            rot_lag_s,
+        }
     }
 }
 
@@ -222,6 +248,8 @@ mod tests {
             translation: Vector3::zeros(),
             velocity: Vector3::zeros(),
             angular_velocity: Vector3::zeros(),
+            pos_lag_s: 0.0,
+            rot_lag_s: 0.0,
         };
         let mut true_x = 0.0;
         for f in 0..60 {

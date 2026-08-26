@@ -50,9 +50,30 @@ function setupThree(t: Tracear): void {
   cube.position.z = 0.15; // object frame: Z points out of the marker
   anchor.add(cube);
   anchor.add(new THREE.AxesHelper(0.5));
+  // Diagnostic plane hugging the marker: if this stays glued while the cube
+  // top drifts, the focal estimate is off; if both swim, it's latency/pose.
+  const plane = new THREE.Mesh(
+    new THREE.PlaneGeometry(1, 1),
+    new THREE.MeshBasicMaterial({ color: 0x39d98a, transparent: true, opacity: 0.15, side: THREE.DoubleSide }),
+  );
+  anchor.add(plane);
   scene.add(anchor);
 
   three = { renderer, scene, t3 };
+
+  // Poses advance ONLY when a new camera frame is displayed: updating the
+  // anchor at render rate would make the cube glide while the video steps at
+  // camera rate — that mismatch reads as swimming.
+  const video = t.video;
+  const onVideoFrame = () => {
+    if (!three) return;
+    three.t3.update(performance.now());
+    video.requestVideoFrameCallback(onVideoFrame);
+  };
+  if ("requestVideoFrameCallback" in video) {
+    video.requestVideoFrameCallback(onVideoFrame);
+  }
+
   const loop = () => {
     if (!three) return;
     const w = container.clientWidth;
@@ -61,7 +82,9 @@ function setupThree(t: Tracear): void {
     if (canvas.width !== Math.round(w * devicePixelRatio) || canvas.height !== Math.round(h * devicePixelRatio)) {
       three.renderer.setSize(w, h, false);
     }
-    three.t3.update();
+    if (!("requestVideoFrameCallback" in video)) {
+      three.t3.update(performance.now()); // rAF fallback
+    }
     three.renderer.render(three.scene, three.t3.camera);
     requestAnimationFrame(loop);
   };
@@ -171,7 +194,9 @@ function drawQuad(e: UpdateEvent) {
   if (msAvg.length > 30) msAvg.shift();
   const avg = msAvg.reduce((a, b) => a + b, 0) / msAvg.length;
   const mode = e.tracking ? "track" : "detect";
-  stats.textContent = `${mode} ${avg.toFixed(1)} ms · ${e.inliers}/${e.matches} · q ${e.quality.toFixed(2)}`;
+  const intr = tracker?.intrinsics();
+  const focal = intr ? ` · f ${(intr.fx / intr.width).toFixed(2)}` : "";
+  stats.textContent = `${mode} ${avg.toFixed(1)} ms · ${e.inliers}/${e.matches} · q ${e.quality.toFixed(2)}${focal}`;
 
   if (clearTimer !== null) clearTimeout(clearTimer);
   clearTimer = window.setTimeout(() => {

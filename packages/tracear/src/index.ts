@@ -13,8 +13,9 @@ export type Homography = Float64Array;
 
 /** Values per marker in a worker result (mirrors the wasm crate):
  * [status (0/1/2), h00..h22, nGood, nTotal, quality,
- *  poseValid, qx,qy,qz,qw, tx,ty,tz, vx,vy,vz, wx,wy,wz, focalRatio] */
-const RESULT_STRIDE = 28;
+ *  poseValid, qx,qy,qz,qw, tx,ty,tz, vx,vy,vz, wx,wy,wz,
+ *  posLagS, rotLagS, focalRatio] */
+const RESULT_STRIDE = 30;
 
 export interface TracearConfig {
   /** Element the managed <video> is appended to; position it yourself (e.g. relative). */
@@ -46,6 +47,10 @@ export interface PoseData {
   velocity: Vec3;
   /** Body-frame angular velocity, rad/s: q(t+dt) ~= q * exp(w*dt). */
   angularVelocity: Vec3;
+  /** Group delay (s) of the translation filter — prediction adds it back. */
+  posLagS: number;
+  /** Group delay (s) of the rotation filter. */
+  rotLagS: number;
 }
 
 export interface CameraIntrinsics {
@@ -247,17 +252,26 @@ export class Tracear {
     const lp = this.lastPoses[index];
     if (!lp) return null;
     const { pose } = lp;
-    const dt = Math.min(Math.max((timestamp - lp.timestamp) / 1000, 0), 0.1);
+    // Prediction horizon = pipeline latency (capture -> now) + the filter's
+    // own group delay, so content lands where the target IS, not where the
+    // lagging filtered signal says it was.
+    const latency = Math.min(Math.max((timestamp - lp.timestamp) / 1000, 0), 0.1);
+    const dtPos = Math.min(latency + pose.posLagS, 0.25);
+    const dtRot = Math.min(latency + pose.rotLagS, 0.25);
+    // Deadband: velocity estimates are never exactly zero — do not let their
+    // noise wiggle a still scene. Clamp: never extrapolate absurdly far.
+    const v = pose.velocity.map((x) => (Math.abs(x) < 0.01 ? 0 : x)) as Vec3;
+    const w = pose.angularVelocity.map((x) => (Math.abs(x) < 0.015 ? 0 : x)) as Vec3;
+    const step = Math.hypot(v[0], v[1], v[2]) * dtPos;
+    const posScale = step > 0.2 ? 0.2 / step : 1;
     const p: Vec3 = [
-      pose.position[0] + pose.velocity[0] * dt,
-      pose.position[1] + pose.velocity[1] * dt,
-      pose.position[2] + pose.velocity[2] * dt,
+      pose.position[0] + v[0] * dtPos * posScale,
+      pose.position[1] + v[1] * dtPos * posScale,
+      pose.position[2] + v[2] * dtPos * posScale,
     ];
-    const dq = quatFromScaledAxis([
-      pose.angularVelocity[0] * dt,
-      pose.angularVelocity[1] * dt,
-      pose.angularVelocity[2] * dt,
-    ]);
+    const angle = Math.hypot(w[0], w[1], w[2]) * dtRot;
+    const rotScale = angle > 0.3 ? 0.3 / angle : 1;
+    const dq = quatFromScaledAxis([w[0] * dtRot * rotScale, w[1] * dtRot * rotScale, w[2] * dtRot * rotScale]);
     const q = quatMultiply(pose.quaternion, dq);
     return mat4FromPose(q, p);
   }
@@ -357,6 +371,8 @@ export class Tracear {
         position: [d[base + 18], d[base + 19], d[base + 20]],
         velocity: [d[base + 21], d[base + 22], d[base + 23]],
         angularVelocity: [d[base + 24], d[base + 25], d[base + 26]],
+        posLagS: d[base + 27],
+        rotLagS: d[base + 28],
       };
     }
     return {
@@ -384,7 +400,7 @@ export class Tracear {
       const state = this.targets[i];
       const update = this.parseUpdate(msg, i);
       if (update) {
-        this.focalRatio = msg.data[i * RESULT_STRIDE + 27];
+        this.focalRatio = msg.data[i * RESULT_STRIDE + 29];
         if (update.pose) {
           this.lastPoses[i] = { pose: update.pose, timestamp: msg.timestamp };
         }

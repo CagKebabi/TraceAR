@@ -250,12 +250,30 @@ pub struct FocalEstimator {
     /// Valid f/width ratio samples (bounded ring).
     samples: Vec<f64>,
     pos: usize,
+    observed: usize,
+    /// Currently served estimate; updated at milestones with hysteresis so a
+    /// per-frame drifting median cannot make rendered content "breathe".
+    served: Option<f64>,
+    next_recompute: usize,
     pub default_ratio: f64,
 }
 
 impl FocalEstimator {
     pub fn new(default_ratio: f64) -> Self {
-        Self { samples: Vec::new(), pos: 0, default_ratio }
+        Self {
+            samples: Vec::new(),
+            pos: 0,
+            observed: 0,
+            served: None,
+            next_recompute: 12,
+            default_ratio,
+        }
+    }
+
+    fn median(&self) -> f64 {
+        let mut s = self.samples.clone();
+        s.sort_by(f64::total_cmp);
+        s[s.len() / 2]
     }
 
     /// Feed one object->image homography (any uniform-scale object frame).
@@ -268,37 +286,46 @@ impl FocalEstimator {
         let v0 = b0 - cy * w0;
         let u1 = a1 - cx * w1;
         let v1 = b1 - cy * w1;
-        let mut push = |f2: f64| {
+        let mut pushed = 0usize;
+        let mut push = |samples: &mut Vec<f64>, pos: &mut usize, f2: f64| {
             if f2.is_finite() && f2 > 0.0 {
                 let ratio = f2.sqrt() / width;
                 if (0.4..=2.5).contains(&ratio) {
-                    if self.samples.len() < 90 {
-                        self.samples.push(ratio);
+                    if samples.len() < 90 {
+                        samples.push(ratio);
                     } else {
-                        self.samples[self.pos] = ratio;
-                        self.pos = (self.pos + 1) % 90;
+                        samples[*pos] = ratio;
+                        *pos = (*pos + 1) % 90;
                     }
+                    return 1;
                 }
             }
+            0
         };
         let d_a = w0 * w1;
         if d_a.abs() > 1e-12 {
-            push(-(u0 * u1 + v0 * v1) / d_a);
+            pushed += push(&mut self.samples, &mut self.pos, -(u0 * u1 + v0 * v1) / d_a);
         }
         let d_b = w1 * w1 - w0 * w0;
         if d_b.abs() > 1e-12 {
-            push((u0 * u0 + v0 * v0 - u1 * u1 - v1 * v1) / d_b);
+            pushed += push(&mut self.samples, &mut self.pos, (u0 * u0 + v0 * v0 - u1 * u1 - v1 * v1) / d_b);
+        }
+        self.observed += pushed;
+        // Milestone recompute (12, 24, 48, ... observations) with 2%
+        // hysteresis: the served value moves rarely and only meaningfully.
+        if self.observed >= self.next_recompute && !self.samples.is_empty() {
+            self.next_recompute = self.observed * 2;
+            let m = self.median();
+            match self.served {
+                Some(cur) if ((m - cur) / cur).abs() <= 0.02 => {}
+                _ => self.served = Some(m),
+            }
         }
     }
 
-    /// Median of accumulated samples; the default until enough evidence.
+    /// Currently served estimate; the default until enough evidence.
     pub fn estimate(&self) -> f64 {
-        if self.samples.len() < 20 {
-            return self.default_ratio;
-        }
-        let mut s = self.samples.clone();
-        s.sort_by(f64::total_cmp);
-        s[s.len() / 2]
+        self.served.unwrap_or(self.default_ratio)
     }
 }
 

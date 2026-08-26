@@ -5,7 +5,7 @@
 use crate::filter::{FilteredPose, PoseFilter, PoseFilterConfig};
 use crate::image::GrayImage;
 use crate::marker::CompiledMarker;
-use crate::pipeline::{MarkerStatus, Pipeline, PipelineResult};
+use crate::pipeline::{Pipeline, PipelineResult};
 use crate::pose::{
     estimate_pose, marker_from_object, FocalEstimator, Intrinsics, Pose, DEFAULT_FOCAL_RATIO,
 };
@@ -95,16 +95,16 @@ impl Session {
             let state = &mut self.states[i];
             let mut pose_out = None;
             match (&r.homography, r.status) {
-                (Some(h), status) => {
+                (Some(h), _) => {
                     state.misses = 0;
                     let marker = self.pipeline.marker(i).unwrap();
                     let (mw, mh) = (marker.width as f64, marker.height as f64);
-                    // Tracked homographies are sub-pixel — the good data for
-                    // online focal self-calibration.
-                    if status == MarkerStatus::Tracked {
-                        let h_obj = h * marker_from_object(mw, mh, state.phys_width);
-                        self.focal.observe(&h_obj, frame.w as f64, frame.h as f64);
-                    }
+                    // Every found frame feeds focal self-calibration (the
+                    // median absorbs detection-frame noise; converging fast
+                    // matters, since a wrong focal makes off-plane content
+                    // swim as the viewpoint translates).
+                    let h_obj = h * marker_from_object(mw, mh, state.phys_width);
+                    self.focal.observe(&h_obj, frame.w as f64, frame.h as f64);
                     if let Some(p) =
                         estimate_pose(h, mw, mh, state.phys_width, &k, state.last_pose.as_ref())
                     {
@@ -148,6 +148,8 @@ impl Session {
                         translation: p.translation,
                         velocity: nalgebra::Vector3::zeros(),
                         angular_velocity: nalgebra::Vector3::zeros(),
+                        pos_lag_s: 0.0,
+                        rot_lag_s: 0.0,
                     })
                 });
                 SessionResult { tracking: r, pose }
@@ -181,7 +183,8 @@ mod tests {
             let mut frame = warp_onto_aa(&marker_img, &h_gt.try_inverse().unwrap(), &bg);
             synthetic::add_gaussian_noise(&mut frame, 2.0, 1000 + f);
             let res = &session.process(&frame, f as f64 * 33.0)[0];
-            if f >= 5 {
+            // Skip the first frames: focal self-calibration settles there.
+            if f >= 10 {
                 let pose = res.pose.as_ref().expect("pose should be available");
                 let k = Intrinsics::from_focal_ratio(session.focal_ratio(), 640.0, 480.0);
                 let p = crate::pose::Pose { rotation: pose.rotation, translation: pose.translation };

@@ -29,8 +29,9 @@ fn rgba_to_gray(rgba: &[u8], w: usize, h: usize) -> Result<GrayImage, JsValue> {
 ///  tx, ty, tz                (translation, physical units),
 ///  vx, vy, vz                (filtered linear velocity, units/s),
 ///  wx, wy, wz                (body-frame angular velocity, rad/s),
+///  posLagS, rotLagS          (filter group delay, seconds),
 ///  focalRatio                (current f / frame_width estimate)]
-pub const RESULT_STRIDE: usize = 28;
+pub const RESULT_STRIDE: usize = 30;
 
 fn encode_results(results: &[SessionResult], focal_ratio: f64, out: &mut Vec<f64>) {
     for r in results {
@@ -60,8 +61,9 @@ fn encode_results(results: &[SessionResult], focal_ratio: f64, out: &mut Vec<f64
                 out.extend_from_slice(&[p.translation.x, p.translation.y, p.translation.z]);
                 out.extend_from_slice(&[p.velocity.x, p.velocity.y, p.velocity.z]);
                 out.extend_from_slice(&[p.angular_velocity.x, p.angular_velocity.y, p.angular_velocity.z]);
+                out.extend_from_slice(&[p.pos_lag_s, p.rot_lag_s]);
             }
-            None => out.extend_from_slice(&[0.0; 14]),
+            None => out.extend_from_slice(&[0.0; 16]),
         }
         out.push(focal_ratio);
     }
