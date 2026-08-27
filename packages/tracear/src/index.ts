@@ -278,18 +278,24 @@ export class Tracear {
       smoothstep(lp.instSpeed ?? 0, 0.04, 0.3),
       smoothstep(lp.instAngSpeed ?? 0, 0.06, 0.5),
     );
+    // Rotation blends far more conservatively than translation: planar-pose
+    // estimation has a rotation ambiguity whose noise makes raw orientation
+    // wobble visibly, while a little rotational lag is imperceptible.
+    // Translation is homography-anchored (low noise) and its lag reads as
+    // the content sliding off the target — the exact opposite trade-off.
+    const alphaRot = alpha * 0.35;
     const basePos: Vec3 = [
       pose.position[0] + (pose.rawPosition[0] - pose.position[0]) * alpha,
       pose.position[1] + (pose.rawPosition[1] - pose.position[1]) * alpha,
       pose.position[2] + (pose.rawPosition[2] - pose.position[2]) * alpha,
     ];
-    const baseQ = quatSlerp(pose.quaternion, pose.rawQuaternion, alpha);
+    const baseQ = quatSlerp(pose.quaternion, pose.rawQuaternion, alphaRot);
 
     // Extrapolate over the pipeline latency, plus the filter's group delay
     // for whatever share of the pose still comes from the filtered signal.
     const latency = Math.min(Math.max((timestamp - lp.timestamp) / 1000, 0), 0.1);
     const dtPos = Math.min(latency + (1 - alpha) * pose.posLagS, 0.25);
-    const dtRot = Math.min(latency + (1 - alpha) * pose.rotLagS, 0.25);
+    const dtRot = Math.min(latency + (1 - alphaRot) * pose.rotLagS, 0.25);
     // Deadband: velocity estimates are never exactly zero — do not let their
     // noise wiggle a still scene. Clamp: never extrapolate absurdly far.
     const v = pose.velocity.map((x) => (Math.abs(x) < 0.01 ? 0 : x)) as Vec3;

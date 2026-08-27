@@ -85,8 +85,11 @@ impl Default for PoseFilterConfig {
         Self {
             pos_min_cutoff: 0.6,
             pos_beta: 1.5,
+            // Rotation stays deliberately stiff: planar-pose ambiguity noise
+            // inflates the measured angular rate, and a large beta would let
+            // that very wobble open the cutoff and pass itself through.
             rot_min_cutoff: 0.6,
-            rot_beta: 2.0,
+            rot_beta: 0.6,
             // Velocity estimates drive prediction — keep them responsive
             // (their lag shows up as swim during acceleration).
             d_cutoff: 2.5,

@@ -351,7 +351,14 @@ async function startTracear(): Promise<RunningEngine> {
   const loop = () => {
     const w = view.clientWidth;
     const hpx = view.clientHeight;
-    if (renderer.domElement.width !== Math.round(w * devicePixelRatio)) renderer.setSize(w, hpx, false);
+    // Check BOTH dimensions: the container height grows when the video
+    // arrives, and a stale small buffer stretches into a blurry cube.
+    if (
+      renderer.domElement.width !== Math.round(w * devicePixelRatio) ||
+      renderer.domElement.height !== Math.round(hpx * devicePixelRatio)
+    ) {
+      renderer.setSize(w, hpx, false);
+    }
     if (!("requestVideoFrameCallback" in video)) t3.update(performance.now());
     renderer.render(scene, t3.camera);
     raf = requestAnimationFrame(loop);
