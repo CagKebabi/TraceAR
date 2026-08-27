@@ -7,7 +7,7 @@
  */
 import { Emitter } from "./events";
 import { mat4FromPose, quatAngle, quatSlerp, type Quat, type Vec3 } from "./math";
-import type { ReadyMessage, ResultMessage, ErrorMessage } from "./worker";
+import type { ReadyMessage, ResultMessage, ErrorMessage, FallbackMessage } from "./worker";
 
 export type Homography = Float64Array;
 
@@ -144,7 +144,7 @@ export class Tracear {
     this.video.autoplay = true;
     this.video.style.display = "block";
     this.video.style.width = "100%";
-    this.worker.onmessage = (ev: MessageEvent<ResultMessage | ErrorMessage>) => {
+    this.worker.onmessage = (ev: MessageEvent<ResultMessage | ErrorMessage | FallbackMessage>) => {
       if (ev.data.type === "result") {
         const { requestId } = ev.data;
         if (requestId !== undefined) {
@@ -153,7 +153,12 @@ export class Tracear {
         } else {
           this.onResult(ev.data);
         }
+      } else if (ev.data.type === "fallback") {
+        // The VideoFrame fast path is unusable (format/API) — bitmaps next.
+        this.useVideoFramePath = false;
+        this.inflight = false;
       } else if (ev.data.type === "error") {
+        this.inflight = false; // never let a failed frame stall the pump
         this.emitter.emit("error", { message: ev.data.message });
       }
     };
@@ -292,7 +297,7 @@ export class Tracear {
     // estimation has a rotation ambiguity whose noise makes raw orientation
     // wobble visibly, while a little rotational lag is imperceptible.
     // Its own error term still pulls hard when orientation truly diverged.
-    const alphaRot = Math.max(alphaSpeed * 0.35, smoothstep(rotErr, 0.035, 0.12));
+    const alphaRot = Math.max(alphaSpeed * 0.5, smoothstep(rotErr, 0.025, 0.09));
     const basePos: Vec3 = [
       pose.position[0] + (pose.rawPosition[0] - pose.position[0]) * alpha,
       pose.position[1] + (pose.rawPosition[1] - pose.position[1]) * alpha,
@@ -390,7 +395,10 @@ export class Tracear {
     }
   }
 
-  /** GPU bitmap path until proven unsupported, then canvas readback. */
+  /** Fastest first: WebCodecs VideoFrame (Y plane read in the worker, no
+   * canvas at all) -> GPU bitmap -> main-thread canvas readback. Each path
+   * permanently falls back on first failure. */
+  private useVideoFramePath = typeof VideoFrame === "function";
   private useBitmapPath = typeof createImageBitmap === "function" && typeof OffscreenCanvas === "function";
 
   private processFrame(): void {
@@ -398,7 +406,21 @@ export class Tracear {
     // Drop frames while the worker is busy — never queue.
     if (!this.inflight && this.video.readyState >= 2) {
       const timestamp = performance.now();
-      if (this.useBitmapPath) {
+      if (this.useVideoFramePath) {
+        let frame: VideoFrame | null = null;
+        try {
+          frame = new VideoFrame(this.video);
+        } catch {
+          this.useVideoFramePath = false;
+        }
+        if (frame) {
+          this.inflight = true;
+          this.worker.postMessage(
+            { type: "frame", videoFrame: frame, width: this.processW, height: this.processH, timestamp },
+            [frame as unknown as Transferable],
+          );
+        }
+      } else if (this.useBitmapPath) {
         // createImageBitmap(video, {resize}) stays on the GPU and returns in
         // ~1 ms; the expensive pixel readback happens in the worker, so the
         // frame pump is not serialized on the main thread (on phones a main-

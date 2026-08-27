@@ -17,9 +17,12 @@ export interface FrameMessage {
   type: "frame";
   /** RGBA pixels (canvas fallback path)… */
   buf?: ArrayBuffer;
-  /** …or a GPU-side bitmap: the slow pixel readback then happens HERE in the
-   * worker instead of blocking the main thread's frame pump. */
+  /** …or a GPU-side bitmap (readback happens here in the worker)… */
   bitmap?: ImageBitmap;
+  /** …or, fastest, a WebCodecs VideoFrame: for YUV camera formats the luma
+   * plane is used directly as grayscale — no canvas, no color conversion. */
+  videoFrame?: VideoFrame;
+  /** Target (processed) size — homographies come back in this pixel space. */
   width: number;
   height: number;
   timestamp: number;
@@ -49,8 +52,15 @@ export interface ErrorMessage {
   message: string;
 }
 
-const post = (msg: ReadyMessage | ResultMessage | ErrorMessage, transfer: Transferable[] = []) =>
-  (self as unknown as Worker).postMessage(msg, transfer);
+/** The VideoFrame path is unusable here (format/API) — use bitmaps instead. */
+export interface FallbackMessage {
+  type: "fallback";
+}
+
+const post = (
+  msg: ReadyMessage | ResultMessage | ErrorMessage | FallbackMessage,
+  transfer: Transferable[] = [],
+) => (self as unknown as Worker).postMessage(msg, transfer);
 
 let engine: Engine | null = null;
 let canvas: OffscreenCanvas | null = null;
@@ -81,15 +91,43 @@ self.onmessage = async (ev: MessageEvent<InitMessage | FrameMessage>) => {
       }
       post({ type: "ready", markerSizes });
     } else if (msg.type === "frame") {
-      if (!engine) return;
+      if (!engine) {
+        msg.videoFrame?.close();
+        return;
+      }
       const t0 = performance.now();
-      const px = msg.bitmap ? rgbaFromBitmap(msg.bitmap, msg.width, msg.height) : new Uint8Array(msg.buf!);
-      // Live frames run the stateful detect<->track pipeline; one-shot
-      // requests (detectImage) must not disturb tracking state.
-      const data =
-        msg.requestId !== undefined
-          ? engine.detect_rgba(px, msg.width, msg.height)
-          : engine.process_rgba(px, msg.width, msg.height, msg.timestamp);
+      let data: Float64Array;
+      if (msg.videoFrame) {
+        const frame = msg.videoFrame;
+        const fmt = frame.format ?? "";
+        if (!(fmt.startsWith("I420") || fmt === "NV12")) {
+          frame.close();
+          post({ type: "fallback" });
+          return;
+        }
+        const rect = frame.visibleRect ?? { x: 0, y: 0, width: frame.codedWidth, height: frame.codedHeight };
+        const size = frame.allocationSize({ rect });
+        const buf = new Uint8Array(size);
+        const layout = await frame.copyTo(buf, { rect });
+        frame.close();
+        data = engine.process_yplane(
+          buf.subarray(layout[0].offset),
+          layout[0].stride,
+          rect.width,
+          rect.height,
+          msg.width,
+          msg.height,
+          msg.timestamp,
+        );
+      } else {
+        const px = msg.bitmap ? rgbaFromBitmap(msg.bitmap, msg.width, msg.height) : new Uint8Array(msg.buf!);
+        // Live frames run the stateful detect<->track pipeline; one-shot
+        // requests (detectImage) must not disturb tracking state.
+        data =
+          msg.requestId !== undefined
+            ? engine.detect_rgba(px, msg.width, msg.height)
+            : engine.process_rgba(px, msg.width, msg.height, msg.timestamp);
+      }
       const ms = performance.now() - t0;
       post(
         {
@@ -105,6 +143,17 @@ self.onmessage = async (ev: MessageEvent<InitMessage | FrameMessage>) => {
       );
     }
   } catch (e) {
-    post({ type: "error", message: e instanceof Error ? e.message : String(e) });
+    const frameMsg = msg as FrameMessage;
+    if (frameMsg.videoFrame) {
+      // copyTo/allocationSize not usable here — degrade to the bitmap path.
+      try {
+        frameMsg.videoFrame.close();
+      } catch {
+        /* already closed */
+      }
+      post({ type: "fallback" });
+    } else {
+      post({ type: "error", message: e instanceof Error ? e.message : String(e) });
+    }
   }
 };

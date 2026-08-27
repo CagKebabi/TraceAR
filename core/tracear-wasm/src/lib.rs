@@ -7,6 +7,23 @@ use tracear_core::pipeline::MarkerStatus;
 use tracear_core::session::{Session, SessionConfig, SessionResult};
 use wasm_bindgen::prelude::*;
 
+/// Grayscale straight from a video frame's Y (luma) plane — no color
+/// conversion, no canvas readback. `stride` is the plane's row pitch in
+/// bytes (>= width).
+fn gray_from_y_plane(y: &[u8], stride: usize, w: usize, h: usize) -> Result<GrayImage, JsValue> {
+    if stride < w || y.len() < stride * (h - 1) + w {
+        return Err(JsValue::from_str("y-plane buffer/stride does not match dimensions"));
+    }
+    if stride == w {
+        return Ok(GrayImage::from_vec(w, h, y[..w * h].to_vec()));
+    }
+    let mut data = Vec::with_capacity(w * h);
+    for row in 0..h {
+        data.extend_from_slice(&y[row * stride..row * stride + w]);
+    }
+    Ok(GrayImage::from_vec(w, h, data))
+}
+
 fn rgba_to_gray(rgba: &[u8], w: usize, h: usize) -> Result<GrayImage, JsValue> {
     if rgba.len() != w * h * 4 {
         return Err(JsValue::from_str("rgba buffer size does not match width*height*4"));
@@ -129,6 +146,33 @@ impl Engine {
         Ok(out)
     }
 
+    /// Stateful processing straight from a camera VideoFrame's Y plane
+    /// (WebCodecs fast path): the luma plane IS the grayscale image. The
+    /// frame is area-downscaled in here to exactly (out_width, out_height),
+    /// so the returned homographies live in that pixel space.
+    #[allow(clippy::too_many_arguments)]
+    pub fn process_yplane(
+        &mut self,
+        y: &[u8],
+        stride: u32,
+        width: u32,
+        height: u32,
+        out_width: u32,
+        out_height: u32,
+        timestamp: f64,
+    ) -> Result<Vec<f64>, JsValue> {
+        let gray = gray_from_y_plane(y, stride as usize, width as usize, height as usize)?;
+        let gray = if gray.w == out_width as usize && gray.h == out_height as usize {
+            gray
+        } else {
+            gray.resize_area(out_width as usize, out_height as usize)
+        };
+        let results = self.session.process(&gray, timestamp);
+        let mut out = Vec::with_capacity(results.len() * RESULT_STRIDE);
+        encode_results(&results, self.session.focal_ratio(), &mut out);
+        Ok(out)
+    }
+
     /// Stateless one-shot detection (detectImage API): raw un-filtered pose,
     /// zero velocities. Same result layout.
     pub fn detect_rgba(&self, rgba: &[u8], width: u32, height: u32) -> Result<Vec<f64>, JsValue> {
@@ -157,5 +201,15 @@ mod tests {
         let g = rgba_to_gray(&rgba, 2, 1).unwrap();
         assert_eq!(g.at(0, 0), 255);
         assert_eq!(g.at(1, 0), 0);
+    }
+
+    #[test]
+    fn y_plane_stride_crop() {
+        // 3x2 visible in a stride-4 buffer; last row has no tail padding.
+        let y = [1u8, 2, 3, 99, 4, 5, 6];
+        let g = gray_from_y_plane(&y, 4, 3, 2).unwrap();
+        assert_eq!(g.data, vec![1, 2, 3, 4, 5, 6]);
+        assert!(gray_from_y_plane(&y, 2, 3, 2).is_err()); // stride < width
+        assert!(gray_from_y_plane(&y[..5], 4, 3, 2).is_err()); // too short
     }
 }
