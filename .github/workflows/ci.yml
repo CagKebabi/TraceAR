@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core
+
+      - name: Core tests
+        working-directory: core
+        run: cargo test --release
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build WASM
+        run: wasm-pack build core/tracear-wasm --release --target web --no-pack --out-dir ../../packages/tracear/src/wasm
+
+      - name: npm install
+        run: npm install
+
+      - name: SDK dist build (type-check + size budget)
+        run: npm run build:sdk
+
+      - name: Demo build (consumes dist)
+        run: npm run build --workspace tracear-demo
+
+      - name: CLI smoke test
+        run: |
+          node -e "const {PNG}=require('pngjs');const s=256;const png=new PNG({width:s,height:s});let seed=0x1234;const rnd=()=>{seed^=seed<<13;seed^=seed>>>17;seed^=seed<<5;return((seed>>>0)%100000)/100000};png.data.fill(128);for(let i=0;i<120;i++){const w=Math.floor(10+rnd()*40),h=Math.floor(10+rnd()*40),x=Math.floor(rnd()*(s-w)),y=Math.floor(rnd()*(s-h)),v=Math.floor(35+rnd()*195);for(let yy=y;yy<y+h;yy++)for(let xx=x;xx<x+w;xx++){const o=(yy*s+xx)*4;png.data[o]=v;png.data[o+1]=v;png.data[o+2]=v;png.data[o+3]=255}}require('fs').writeFileSync('ci-marker.png',PNG.sync.write(png))"
+          node packages/tracear/bin/tracear.mjs compile ci-marker.png
+          test -s ci-marker.tracear

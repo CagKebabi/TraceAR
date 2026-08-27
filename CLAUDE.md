@@ -12,8 +12,11 @@ Goal: beat MindAR on jitter + performance on mobile web (Android Chrome, iOS Saf
   If `cargo` is not on PATH in a shell, prepend: `$env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"`.
 - Core tests: `cd core; cargo test` (pure Rust, no browser needed).
 - wasm target installed: `wasm32-unknown-unknown`; `wasm-pack` lives in `~\.cargo\bin`.
-- `npm run build:wasm` → builds `packages/tracear/wasm/` (gitignored build artifact;
+- `npm run build:wasm` → builds `packages/tracear/src/wasm/` (gitignored build artifact;
   required after a fresh clone and after any core change).
+- `npm run build:sdk` → dist build of the npm package (tsc + wasm copy + size budget).
+  Dev servers consume `src/` via the `development` exports condition; `vite build`
+  consumes `dist/` — rebuild the SDK before judging a production build.
 - `npm run demo` → HTTPS dev server (self-signed, for phone testing over LAN).
   For local desktop work set `NO_SSL=1` first — localhost is a secure context on
   plain HTTP, so no cert warning.

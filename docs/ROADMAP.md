@@ -63,7 +63,7 @@ led to the speed-adaptive raw/filtered rendering blend + orientation-
 invariant focal ratio; device check passed ("frozen when still" achieved,
 motion glue acceptable — further polish rides on M4 real-device tuning).
 
-## M4 — Performance pass + real-device bench  🟡 in progress
+## M4 — Performance pass + real-device bench  ✅ done (2026-08-27)
 
 WASM SIMD in hot loops (grayscale, FAST, Hamming, LK), buffer reuse audit,
 optional WebGL grayscale path, recorded real-video regression set (user
@@ -72,15 +72,20 @@ records; runs in Node), side-by-side MindAR comparison page.
 **Accept:** metric table in ARCHITECTURE.md fully met on a mid-range Android
 device; MindAR comparison shows lower jitter + lower ms/frame on the same
 scenes.
-Progress (2026-08-26): profile-driven scalar pass — running-sum box blur
-(bit-identical, guarded by a naive-reference test), FAST candidate-list NMS
-+ bounds-check elision, row-sliced orientation, BRIEF unchecked sampling —
-native detection 34 -> 25 ms; wasm32 builds with +simd128
-(core/.cargo/config.toml). Desktop-browser detection 41-58 -> ~21 ms warm
-(~2x). Remaining: MindAR comparison page, real-video set, device metric
-table.
+Done: profile-driven scalar pass (running-sum box blur bit-identical,
+FAST candidate-list NMS, row-sliced orientation, unchecked BRIEF sampling;
+native detection 34 -> 25 ms) + wasm +simd128; GPU frame path
+(createImageBitmap + worker-side readback — the main-thread getImageData
+readback was halving the mobile update rate); MindAR side-by-side app
+(apps/compare, identical second-difference jitter metric).
+**Device verdict (same phone, same marker): median jitter 1.90 px vs
+MindAR 5.47 px, p90 5.8 vs 8.3, CV ~2.5 ms/frame tracked, visibly better
+perspective.** The device rounds also drove the M3 polish (raw/filtered
+blend, rotation-ambiguity prior, WebGL-context cleanup for Safari).
+Deferred to M6: recorded real-video regression set, WebCodecs Y-plane
+frame path (would lift the mobile update rate toward 60/s).
 
-## M5 — SDK polish + npm publish
+## M5 — SDK polish + npm publish  🟡 ready to publish
 
 API freeze, docs site/README with recipes, marker compiler UX
 (`npx tracear compile`), error handling (camera permissions, unsupported
@@ -89,6 +94,13 @@ browsers), size budget enforcement, CI (tests + bench regression), publish
 
 **Accept:** `npm i tracear` + 20-line integration works on a clean project;
 bundle < 300 KB gzipped; README quickstart verified on both platforms.
+Status: dist build (tsc, module structure + worker/wasm assets preserved,
+`development` exports condition keeps dev servers on source), demo prod
+build + self-test verified against dist, `npx tracear compile` CLI
+(PNG/JPEG) working, package README, GitHub Actions CI, size 92 KB gz
+(budget 300), `npm pack` clean: tracear-0.1.0.tgz (95 KB, 19 files); the
+name is free on npm. Remaining: `npm publish` (needs the owner's npm
+login).
 
 ## M6 — Stretch / research
 

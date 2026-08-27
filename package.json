@@ -10,7 +10,8 @@
   ],
   "scripts": {
     "test:core": "cd core && cargo test",
-    "build:wasm": "wasm-pack build core/tracear-wasm --release --target web --no-pack --out-dir ../../packages/tracear/wasm",
+    "build:wasm": "wasm-pack build core/tracear-wasm --release --target web --no-pack --out-dir ../../packages/tracear/src/wasm",
+    "build:sdk": "npm run build --workspace tracear",
     "demo": "npm run dev --workspace tracear-demo",
     "compare": "npm run dev --workspace tracear-compare"
   },

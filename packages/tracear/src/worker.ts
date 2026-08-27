@@ -4,7 +4,7 @@
  * CV work. Frames arrive as transferred RGBA buffers; results go back as a
  * transferred Float64Array (RESULT_STRIDE values per marker, see wasm crate).
  */
-import init, { Engine } from "../wasm/tracear_wasm.js";
+import init, { Engine } from "./wasm/tracear_wasm.js";
 
 export interface InitMessage {
   type: "init";

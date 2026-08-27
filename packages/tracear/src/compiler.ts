@@ -3,7 +3,7 @@
  * own WASM instance on the calling thread instead of round-tripping through
  * the tracking worker.
  */
-import init, { compile_marker_rgba } from "../wasm/tracear_wasm.js";
+import init, { compile_marker_rgba } from "./wasm/tracear_wasm.js";
 
 let wasmReady: Promise<unknown> | null = null;
 

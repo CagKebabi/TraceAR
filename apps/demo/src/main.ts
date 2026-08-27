@@ -139,6 +139,15 @@ async function setMarker(source: CanvasImageSource & ImageBitmapSource, label: s
     tracker?.dispose();
     tracker = null;
     markerStatus.textContent = `${label}: ${res.featureCount} features, ${(res.data.length / 1024).toFixed(1)} KB (${res.width}x${res.height})`;
+    // Offer the compiled target for download — the file apps ship to
+    // Tracear.create({ targets }).
+    const tracearBlob = new Blob([res.data.slice()], { type: "application/octet-stream" });
+    const dl = document.getElementById("download-tracear") as HTMLAnchorElement | null;
+    if (dl) {
+      if (dl.href) URL.revokeObjectURL(dl.href);
+      dl.href = URL.createObjectURL(tracearBlob);
+      dl.hidden = false;
+    }
     const pctx = markerPreview.getContext("2d")!;
     pctx.clearRect(0, 0, markerPreview.width, markerPreview.height);
     pctx.drawImage(source, 0, 0, markerPreview.width, markerPreview.height);
