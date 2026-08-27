@@ -22,11 +22,19 @@ let markerSource: CanvasImageSource | null = null;
 let tracker: Tracear | null = null;
 let clearTimer: number | null = null;
 let three: { renderer: THREE.WebGLRenderer; scene: THREE.Scene; t3: TracearThree } | null = null;
+let threeGen = 0; // invalidates stale rVFC/rAF loops across restarts
 
 /** Transparent WebGL layer over the video: a cube + axes anchored to the marker. */
 function setupThree(t: Tracear): void {
   if (three) {
     three.renderer.dispose();
+    // Release the WebGL context immediately — Safari caps live contexts per
+    // tab and restarts otherwise accumulate zombies until everything freezes.
+    try {
+      three.renderer.forceContextLoss();
+    } catch {
+      /* already lost */
+    }
     three.renderer.domElement.remove();
   }
   const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
@@ -60,13 +68,14 @@ function setupThree(t: Tracear): void {
   scene.add(anchor);
 
   three = { renderer, scene, t3 };
+  const gen = ++threeGen;
 
   // Poses advance ONLY when a new camera frame is displayed: updating the
   // anchor at render rate would make the cube glide while the video steps at
   // camera rate — that mismatch reads as swimming.
   const video = t.video;
   const onVideoFrame = () => {
-    if (!three) return;
+    if (!three || gen !== threeGen) return;
     three.t3.update(performance.now());
     video.requestVideoFrameCallback(onVideoFrame);
   };
@@ -75,7 +84,7 @@ function setupThree(t: Tracear): void {
   }
 
   const loop = () => {
-    if (!three) return;
+    if (!three || gen !== threeGen) return;
     const w = container.clientWidth;
     const h = container.clientHeight;
     const canvas = three.renderer.domElement;

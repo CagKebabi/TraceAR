@@ -266,6 +266,20 @@ function anchorContent(): THREE.Group {
   return g;
 }
 
+/**
+ * Release the WebGL context NOW, not at garbage collection: Safari caps live
+ * contexts per tab (~8-16), and engine restarts otherwise accumulate zombie
+ * contexts until the browser force-drops them and everything starts freezing.
+ */
+function killRenderer(renderer: THREE.WebGLRenderer): void {
+  try {
+    renderer.dispose();
+    renderer.forceContextLoss();
+  } catch {
+    /* already lost */
+  }
+}
+
 function addLights(scene: THREE.Scene): void {
   scene.add(new THREE.AmbientLight(0xffffff, 0.7));
   const dir = new THREE.DirectionalLight(0xffffff, 1.2);
@@ -342,8 +356,10 @@ async function startTracear(): Promise<RunningEngine> {
   });
 
   let raf = 0;
+  let stopped = false;
   const video = tracker.video;
   const onVideoFrame = () => {
+    if (stopped) return;
     t3.update(performance.now());
     video.requestVideoFrameCallback(onVideoFrame);
   };
@@ -373,10 +389,11 @@ async function startTracear(): Promise<RunningEngine> {
   return {
     name: "tracear",
     stop() {
+      stopped = true;
       cancelAnimationFrame(raf);
       endStatsLoop();
       tracker.dispose();
-      renderer.dispose();
+      killRenderer(renderer);
       view.innerHTML = "";
     },
   };
@@ -452,6 +469,7 @@ async function startMindar(): Promise<RunningEngine> {
       } catch {
         /* mindar.stop throws if the camera never started */
       }
+      killRenderer(renderer);
       view.innerHTML = "";
       view.style.height = "";
     },
