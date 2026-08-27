@@ -1,4 +1,4 @@
-# Tracear
+# TraceAR
 
 [![npm](https://img.shields.io/npm/v/%40tracear%2Fsdk?label=%40tracear%2Fsdk&color=2a6df4)](https://www.npmjs.com/package/@tracear/sdk)
 [![CI](https://github.com/CagKebabi/TraceAR/actions/workflows/ci.yml/badge.svg)](https://github.com/CagKebabi/TraceAR/actions/workflows/ci.yml)
