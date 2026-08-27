@@ -66,7 +66,62 @@ let engine: Engine | null = null;
 let canvas: OffscreenCanvas | null = null;
 let ctx: OffscreenCanvasRenderingContext2D | null = null;
 
+// WebGL readback state: texImage2D(bitmap) + readPixels into ONE reused
+// buffer. getImageData allocates ~1 MB of garbage per frame (tens of MB/s at
+// camera rate), which degrades Safari over long runs; this path is
+// steady-state zero-allocation. (readPixels from an FBO-attached texture
+// returns rows in uploaded, i.e. top-down, order — verified.)
+let gl: WebGLRenderingContext | null | undefined;
+let glTex: WebGLTexture | null = null;
+let glBuf: Uint8Array | null = null;
+let glW = 0;
+let glH = 0;
+
+function rgbaFromBitmapGL(bitmap: ImageBitmap, w: number, h: number): Uint8Array | null {
+  if (gl === undefined) {
+    try {
+      gl = new OffscreenCanvas(1, 1).getContext("webgl", {
+        antialias: false,
+        depth: false,
+        stencil: false,
+      }) as WebGLRenderingContext | null;
+      if (gl) {
+        glTex = gl.createTexture();
+        gl.bindFramebuffer(gl.FRAMEBUFFER, gl.createFramebuffer());
+        gl.bindTexture(gl.TEXTURE_2D, glTex);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      }
+    } catch {
+      gl = null;
+    }
+  }
+  if (!gl || !glTex) return null;
+  try {
+    gl.bindTexture(gl.TEXTURE_2D, glTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, bitmap);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, glTex, 0);
+    if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
+      gl = null;
+      return null;
+    }
+    if (!glBuf || glW !== w || glH !== h) {
+      glBuf = new Uint8Array(w * h * 4);
+      glW = w;
+      glH = h;
+    }
+    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, glBuf);
+    bitmap.close();
+    return glBuf;
+  } catch {
+    gl = null; // fall back to the 2D path (bitmap still open)
+    return null;
+  }
+}
+
 function rgbaFromBitmap(bitmap: ImageBitmap, w: number, h: number): Uint8Array {
+  const viaGl = rgbaFromBitmapGL(bitmap, w, h);
+  if (viaGl) return viaGl;
   if (!canvas || canvas.width !== w || canvas.height !== h) {
     canvas = new OffscreenCanvas(w, h);
     ctx = canvas.getContext("2d", { willReadFrequently: true });
