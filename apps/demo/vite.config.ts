@@ -15,7 +15,7 @@ export default defineConfig({
   },
   optimizeDeps: {
     // Consume the SDK as source (it ships .ts + a wasm asset — prebundling breaks both).
-    exclude: ["tracear"],
+    exclude: ["@tracear/sdk"],
   },
   worker: {
     format: "es",

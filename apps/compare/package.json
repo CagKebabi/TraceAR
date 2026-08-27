@@ -9,9 +9,9 @@
     "preview": "vite preview --host"
   },
   "dependencies": {
+    "@tracear/sdk": "*",
     "mind-ar": "^1.2.5",
-    "three": "0.151.3",
-    "tracear": "*"
+    "three": "0.151.3"
   },
   "devDependencies": {
     "@vitejs/plugin-basic-ssl": "^1.2.0",

@@ -9,8 +9,8 @@
     "preview": "vite preview --host"
   },
   "dependencies": {
-    "three": "^0.170.0",
-    "tracear": "*"
+    "@tracear/sdk": "*",
+    "three": "^0.170.0"
   },
   "devDependencies": {
     "@vitejs/plugin-basic-ssl": "^1.2.0",

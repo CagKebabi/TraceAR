@@ -6,7 +6,7 @@ Tracear is a web AR engine focused on doing one thing extremely well: tracking a
 known image target with a phone camera in the browser — smoothly, with low
 latency, on both Android and iOS.
 
-> Status: **early development (Phase 1 — image tracking core)**. Not yet published to npm.
+> npm: [`@tracear/sdk`](https://www.npmjs.com/package/@tracear/sdk) — Phase 1 (image tracking) complete; APIs may still move before 1.0.
 
 ## Why another web image tracker?
 

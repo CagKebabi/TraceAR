@@ -1,7 +1,7 @@
 import * as THREE from "three";
-import { Tracear, type UpdateEvent } from "tracear";
-import { compileImage } from "tracear/compiler";
-import { TracearThree } from "tracear/three";
+import { Tracear, type UpdateEvent } from "@tracear/sdk";
+import { compileImage } from "@tracear/sdk/compiler";
+import { TracearThree } from "@tracear/sdk/three";
 
 /**
  * MindAR's compiler yields via tf.nextFrame(), and tfjs captures the global

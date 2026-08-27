@@ -1,6 +1,7 @@
 # Tracear — project notes for Claude
 
-Web AR image-tracking engine, to be published as a **free npm SDK** (`tracear`).
+Web AR image-tracking engine, published as a **free npm SDK** (`@tracear/sdk`;
+the bare name was rejected by npm as too similar to `tracer`).
 Goal: beat MindAR on jitter + performance on mobile web (Android Chrome, iOS Safari).
 
 - Communicate with the user in **Turkish**. Code, comments, and docs are in **English** (public OSS project).

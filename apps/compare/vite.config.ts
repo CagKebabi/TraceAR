@@ -18,7 +18,7 @@ export default defineConfig({
     dedupe: ["three"],
   },
   optimizeDeps: {
-    exclude: ["tracear"],
+    exclude: ["@tracear/sdk"],
   },
   worker: {
     format: "es",

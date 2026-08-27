@@ -1,4 +1,4 @@
-# tracear
+# @tracear/sdk
 
 **High-performance, jitter-free image tracking for the mobile web.**
 
@@ -19,7 +19,7 @@ detection around 20 ms. Compile a 512 px marker in ~0.1 s to a ~170 KB file
 ## Install
 
 ```sh
-npm i tracear
+npm i @tracear/sdk
 ```
 
 Use a bundler (Vite works out of the box — the SDK ships an ES-module worker
@@ -39,7 +39,7 @@ npx tracear compile poster.png        # -> poster.tracear
 or in the browser:
 
 ```ts
-import { compileImage } from "tracear/compiler";
+import { compileImage } from "@tracear/sdk/compiler";
 const { data } = await compileImage(imageFileOrCanvas); // Uint8Array (.tracear)
 ```
 
@@ -49,7 +49,7 @@ repeating patterns.
 ## 2 · Track
 
 ```ts
-import { Tracear } from "tracear";
+import { Tracear } from "@tracear/sdk";
 
 const tracker = await Tracear.create({
   container: document.querySelector("#ar")!, // gets the <video> appended
@@ -79,7 +79,7 @@ const m = tracker.poseAt(0, performance.now()); // column-major 4x4 | null
 
 ```ts
 import * as THREE from "three";
-import { TracearThree } from "tracear/three";
+import { TracearThree } from "@tracear/sdk/three";
 
 const t3 = new TracearThree(tracker);
 scene.add(t3.anchor(0));          // put your content inside this Group
