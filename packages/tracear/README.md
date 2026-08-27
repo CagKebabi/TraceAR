@@ -22,10 +22,18 @@ detection around 20 ms. Compile a 512 px marker in ~0.1 s to a ~170 KB file
 npm i @tracear/sdk
 ```
 
-Use a bundler (Vite works out of the box — the SDK ships an ES-module worker
-and a WASM asset via `new URL(...)` patterns every modern bundler
-understands). Serving directly from a CDN does not work yet (workers must be
-same-origin).
+Use a bundler. With **Vite**, add one line so the dev server doesn't
+pre-bundle the SDK (pre-bundling breaks the worker/WASM asset URLs; production
+builds are unaffected either way):
+
+```ts
+// vite.config.ts
+export default defineConfig({
+  optimizeDeps: { exclude: ["@tracear/sdk"] },
+});
+```
+
+Serving directly from a CDN does not work yet (workers must be same-origin).
 
 ## 1 · Compile a marker
 
