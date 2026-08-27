@@ -1,6 +1,6 @@
 {
   "name": "@tracear/sdk",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "High-performance, jitter-free image tracking for the mobile web — a WASM+SIMD AR engine",
   "type": "module",
   "license": "MIT",
@@ -15,17 +15,14 @@
   "sideEffects": false,
   "exports": {
     ".": {
-      "development": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
     "./three": {
-      "development": "./src/three.ts",
       "types": "./dist/three.d.ts",
       "default": "./dist/three.js"
     },
     "./compiler": {
-      "development": "./src/compiler.ts",
       "types": "./dist/compiler.d.ts",
       "default": "./dist/compiler.js"
     }

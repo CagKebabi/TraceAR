@@ -16,8 +16,10 @@ Goal: beat MindAR on jitter + performance on mobile web (Android Chrome, iOS Saf
 - `npm run build:wasm` → builds `packages/tracear/src/wasm/` (gitignored build artifact;
   required after a fresh clone and after any core change).
 - `npm run build:sdk` → dist build of the npm package (tsc + wasm copy + size budget).
-  Dev servers consume `src/` via the `development` exports condition; `vite build`
-  consumes `dist/` — rebuild the SDK before judging a production build.
+  ALL consumers (dev servers included) resolve the SDK to `dist/` — run build:sdk
+  after every SDK source change. (A `development`→src exports condition was tried
+  and REMOVED in 0.1.1: it ships in the published package.json but src does not,
+  breaking every consumer's dev server.)
 - `npm run demo` → HTTPS dev server (self-signed, for phone testing over LAN).
   For local desktop work set `NO_SSL=1` first — localhost is a secure context on
   plain HTTP, so no cert warning.
