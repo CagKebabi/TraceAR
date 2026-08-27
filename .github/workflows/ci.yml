@@ -9,7 +9,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -26,15 +26,18 @@ jobs:
       - name: Install wasm-pack
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
 
       - name: Build WASM
         run: wasm-pack build core/tracear-wasm --release --target web --no-pack --out-dir ../../packages/tracear/src/wasm
 
-      - name: npm install
-        run: npm install
+      - name: npm install (sdk + demo only)
+        # The compare app pulls mind-ar, whose native `canvas` dependency
+        # needs cairo/pixman system libraries on Linux — and CI never runs
+        # mind-ar's Node side. Install only what the pipeline builds.
+        run: npm install --include-workspace-root -w @tracear/sdk -w tracear-demo
 
       - name: SDK dist build (type-check + size budget)
         run: npm run build:sdk
