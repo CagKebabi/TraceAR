@@ -100,12 +100,21 @@ self.onmessage = async (ev: MessageEvent<InitMessage | FrameMessage>) => {
       if (msg.videoFrame) {
         const frame = msg.videoFrame;
         const fmt = frame.format ?? "";
-        if (!(fmt.startsWith("I420") || fmt === "NV12")) {
+        const rect = frame.visibleRect ?? { x: 0, y: 0, width: frame.codedWidth, height: frame.codedHeight };
+        // Camera VideoFrames can arrive in SENSOR orientation (landscape)
+        // with rotation metadata the <video> element applies but copyTo does
+        // not — feeding that here would squash the image and kill detection.
+        // Any aspect mismatch with the target: use the bitmap path instead,
+        // which draws the video element (rotation applied).
+        const aspectOk =
+          rect.width > 0 &&
+          rect.height > 0 &&
+          Math.abs(rect.width / rect.height - msg.width / msg.height) / (msg.width / msg.height) < 0.01;
+        if (!(fmt.startsWith("I420") || fmt === "NV12") || !aspectOk) {
           frame.close();
           post({ type: "fallback" });
           return;
         }
-        const rect = frame.visibleRect ?? { x: 0, y: 0, width: frame.codedWidth, height: frame.codedHeight };
         const size = frame.allocationSize({ rect });
         const buf = new Uint8Array(size);
         const layout = await frame.copyTo(buf, { rect });

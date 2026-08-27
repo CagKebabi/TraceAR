@@ -9,10 +9,11 @@ use wasm_bindgen::prelude::*;
 
 /// Grayscale straight from a video frame's Y (luma) plane — no color
 /// conversion, no canvas readback. `stride` is the plane's row pitch in
-/// bytes (>= width).
-fn gray_from_y_plane(y: &[u8], stride: usize, w: usize, h: usize) -> Result<GrayImage, JsValue> {
-    if stride < w || y.len() < stride * (h - 1) + w {
-        return Err(JsValue::from_str("y-plane buffer/stride does not match dimensions"));
+/// bytes (>= width). String errors: JsValue must not be constructed in
+/// native unit tests (wasm-bindgen panics outside a JS host).
+fn gray_from_y_plane(y: &[u8], stride: usize, w: usize, h: usize) -> Result<GrayImage, String> {
+    if stride < w || h == 0 || y.len() < stride * (h - 1) + w {
+        return Err("y-plane buffer/stride does not match dimensions".into());
     }
     if stride == w {
         return Ok(GrayImage::from_vec(w, h, y[..w * h].to_vec()));
@@ -24,9 +25,9 @@ fn gray_from_y_plane(y: &[u8], stride: usize, w: usize, h: usize) -> Result<Gray
     Ok(GrayImage::from_vec(w, h, data))
 }
 
-fn rgba_to_gray(rgba: &[u8], w: usize, h: usize) -> Result<GrayImage, JsValue> {
+fn rgba_to_gray(rgba: &[u8], w: usize, h: usize) -> Result<GrayImage, String> {
     if rgba.len() != w * h * 4 {
-        return Err(JsValue::from_str("rgba buffer size does not match width*height*4"));
+        return Err("rgba buffer size does not match width*height*4".into());
     }
     let mut data = Vec::with_capacity(w * h);
     for px in rgba.chunks_exact(4) {
@@ -139,7 +140,7 @@ impl Engine {
     /// in ms (performance.now() domain). Returns RESULT_STRIDE f64 values
     /// per marker (see constant above).
     pub fn process_rgba(&mut self, rgba: &[u8], width: u32, height: u32, timestamp: f64) -> Result<Vec<f64>, JsValue> {
-        let gray = rgba_to_gray(rgba, width as usize, height as usize)?;
+        let gray = rgba_to_gray(rgba, width as usize, height as usize).map_err(|e| JsValue::from_str(&e))?;
         let results = self.session.process(&gray, timestamp);
         let mut out = Vec::with_capacity(results.len() * RESULT_STRIDE);
         encode_results(&results, self.session.focal_ratio(), &mut out);
@@ -161,7 +162,7 @@ impl Engine {
         out_height: u32,
         timestamp: f64,
     ) -> Result<Vec<f64>, JsValue> {
-        let gray = gray_from_y_plane(y, stride as usize, width as usize, height as usize)?;
+        let gray = gray_from_y_plane(y, stride as usize, width as usize, height as usize).map_err(|e| JsValue::from_str(&e))?;
         let gray = if gray.w == out_width as usize && gray.h == out_height as usize {
             gray
         } else {
@@ -176,7 +177,7 @@ impl Engine {
     /// Stateless one-shot detection (detectImage API): raw un-filtered pose,
     /// zero velocities. Same result layout.
     pub fn detect_rgba(&self, rgba: &[u8], width: u32, height: u32) -> Result<Vec<f64>, JsValue> {
-        let gray = rgba_to_gray(rgba, width as usize, height as usize)?;
+        let gray = rgba_to_gray(rgba, width as usize, height as usize).map_err(|e| JsValue::from_str(&e))?;
         let results = self.session.detect_only(&gray);
         let mut out = Vec::with_capacity(results.len() * RESULT_STRIDE);
         encode_results(&results, self.session.focal_ratio(), &mut out);
@@ -187,7 +188,7 @@ impl Engine {
 /// Compile an RGBA image into `.tracear` marker bytes.
 #[wasm_bindgen]
 pub fn compile_marker_rgba(rgba: &[u8], width: u32, height: u32) -> Result<Vec<u8>, JsValue> {
-    let gray = rgba_to_gray(rgba, width as usize, height as usize)?;
+    let gray = rgba_to_gray(rgba, width as usize, height as usize).map_err(|e| JsValue::from_str(&e))?;
     Ok(compile_marker(&gray, &CompileConfig::default()).to_bytes())
 }
 

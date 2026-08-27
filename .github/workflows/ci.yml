@@ -28,7 +28,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Build WASM
         run: wasm-pack build core/tracear-wasm --release --target web --no-pack --out-dir ../../packages/tracear/src/wasm
