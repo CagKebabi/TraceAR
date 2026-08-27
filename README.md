@@ -1,12 +1,45 @@
 # Tracear
 
+[![npm](https://img.shields.io/npm/v/%40tracear%2Fsdk?label=%40tracear%2Fsdk&color=2a6df4)](https://www.npmjs.com/package/@tracear/sdk)
+[![CI](https://github.com/CagKebabi/TraceAR/actions/workflows/ci.yml/badge.svg)](https://github.com/CagKebabi/TraceAR/actions/workflows/ci.yml)
+[![size](https://img.shields.io/badge/SDK-95%20KB%20gzipped-39d98a)](packages/tracear)
+[![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
 **High-performance, jitter-free image tracking for the mobile web.**
 
 Tracear is a web AR engine focused on doing one thing extremely well: tracking a
 known image target with a phone camera in the browser — smoothly, with low
 latency, on both Android and iOS.
 
-> npm: [`@tracear/sdk`](https://www.npmjs.com/package/@tracear/sdk) — Phase 1 (image tracking) complete; APIs may still move before 1.0.
+```sh
+npm i @tracear/sdk
+```
+
+```ts
+import { Tracear } from "@tracear/sdk";
+
+const tracker = await Tracear.create({ container, targets: ["/poster.tracear"] });
+tracker.on("update", (e) => {/* filtered 6DoF pose + homography */});
+await tracker.start();
+```
+
+Full quickstart, three.js recipe and the marker compiler:
+**[packages/tracear →](packages/tracear#readme)**
+
+## Measured against MindAR
+
+Same phone, same marker, same metric — reproduce it yourself with the
+side-by-side app in [`apps/compare`](apps/compare):
+
+| | **Tracear** | MindAR |
+|---|---|---|
+| median jitter (640 px frame) | **1.90 px** | 5.47 px |
+| p90 jitter | **5.8 px** | 8.3 px |
+| CV time / frame (tracking) | **~2.5 ms** | n/a (not exposed) |
+| marker compile (512 px) | **0.1 s / 169 KB** | 1.4 s / 418 KB |
+| SDK size (gzipped, incl. WASM) | **~95 KB** | ~370 KB+ (tfjs) |
+
+> Phase 1 (image tracking) complete; APIs may still move before 1.0.
 
 ## Why another web image tracker?
 

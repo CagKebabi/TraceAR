@@ -1,5 +1,9 @@
 # @tracear/sdk
 
+[![npm](https://img.shields.io/npm/v/%40tracear%2Fsdk?color=2a6df4)](https://www.npmjs.com/package/@tracear/sdk)
+[![CI](https://github.com/CagKebabi/TraceAR/actions/workflows/ci.yml/badge.svg)](https://github.com/CagKebabi/TraceAR/actions/workflows/ci.yml)
+[![license](https://img.shields.io/badge/license-MIT-blue)](https://github.com/CagKebabi/TraceAR/blob/main/LICENSE)
+
 **High-performance, jitter-free image tracking for the mobile web.**
 
 Tracear tracks known image targets with the phone camera, in the browser, and
