@@ -125,8 +125,9 @@ export class Tracear {
   private processH = 0;
   private nextRequestId = 1;
   private pending = new Map<number, (r: ResultMessage) => void>();
-  private lastPoses: ({ pose: PoseData; timestamp: number; instSpeed?: number; instAngSpeed?: number } | null)[] =
-    [];
+  private lastPoses: ({ pose: PoseData; timestamp: number; emaSpeed: number; emaAngSpeed: number } | null)[] = [];
+  /** Presentation-side rotation state for render smoothing (per target). */
+  private renderQuats: (Quat | null)[] = [];
   private focalRatio = 0;
   private lastProcessW = 0;
   private lastProcessH = 0;
@@ -136,6 +137,7 @@ export class Tracear {
     this.worker = worker;
     this.targets = markerSizes.map(([width, height]) => ({ found: false, misses: 0, width, height }));
     this.lastPoses = markerSizes.map(() => null);
+    this.renderQuats = markerSizes.map(() => null);
     this.video = document.createElement("video");
     this.video.playsInline = true;
     this.video.muted = true;
@@ -266,9 +268,11 @@ export class Tracear {
       const t = Math.min(Math.max((x - lo) / (hi - lo), 0), 1);
       return t * t * (3 - 2 * t);
     };
+    // Thresholds sit safely above the at-rest noise floor of the raw-pose
+    // speed estimate (~0.05 u/s), so alpha is EXACTLY zero on a still scene.
     const alpha = Math.max(
-      smoothstep(lp.instSpeed ?? 0, 0.04, 0.3),
-      smoothstep(lp.instAngSpeed ?? 0, 0.06, 0.5),
+      smoothstep(lp.emaSpeed, 0.1, 0.5),
+      smoothstep(lp.emaAngSpeed, 0.15, 0.8),
     );
     // Rotation blends far more conservatively than translation: planar-pose
     // estimation has a rotation ambiguity whose noise makes raw orientation
@@ -283,25 +287,32 @@ export class Tracear {
     ];
     const baseQ = quatSlerp(pose.quaternion, pose.rawQuaternion, alphaRot);
 
-    // Extrapolate TRANSLATION over the pipeline latency plus the filter's
-    // group delay for whatever share still comes from the filtered signal.
-    // Rotation is deliberately NOT extrapolated: the planar-pose ambiguity
-    // puts fake rad/s into the angular-velocity estimate, and predicting
-    // with it manufactures wobble far worse than the imperceptible lag it
-    // would remove.
+    // Extrapolate TRANSLATION over the pipeline latency only. Filter-lag
+    // compensation is deliberately NOT added: at high speed the raw blend
+    // already removes the lag, and at low speed the lag distance is tiny
+    // while the compensation horizon (~200 ms x a noisy velocity) launched
+    // the content off the target and back — the "overshoots then settles"
+    // artifact. Rotation is not extrapolated at all (the ambiguity puts
+    // fake rad/s into the angular velocity; predicting with it manufactures
+    // wobble far worse than the imperceptible lag it would remove).
     const latency = Math.min(Math.max((timestamp - lp.timestamp) / 1000, 0), 0.1);
-    const dtPos = Math.min(latency + (1 - alpha) * pose.posLagS, 0.25);
     // Deadband: velocity estimates are never exactly zero — do not let their
     // noise wiggle a still scene. Clamp: never extrapolate absurdly far.
     const v = pose.velocity.map((x) => (Math.abs(x) < 0.01 ? 0 : x)) as Vec3;
-    const step = Math.hypot(v[0], v[1], v[2]) * dtPos;
+    const step = Math.hypot(v[0], v[1], v[2]) * latency;
     const posScale = step > 0.2 ? 0.2 / step : 1;
     const p: Vec3 = [
-      basePos[0] + v[0] * dtPos * posScale,
-      basePos[1] + v[1] * dtPos * posScale,
-      basePos[2] + v[2] * dtPos * posScale,
+      basePos[0] + v[0] * latency * posScale,
+      basePos[1] + v[1] * latency * posScale,
+      basePos[2] + v[2] * latency * posScale,
     ];
-    return mat4FromPose(baseQ, p);
+    // Render-side rotation glide: measurements arrive at ~25-30 Hz while the
+    // display runs faster; without this, orientation visibly steps. Half-way
+    // slerp per render frame turns steps into a glide at ~1 frame of lag.
+    const prevQ = this.renderQuats[index];
+    const q = prevQ ? quatSlerp(prevQ, baseQ, 0.5) : baseQ;
+    this.renderQuats[index] = q;
+    return mat4FromPose(q, p);
   }
 
   /** Latest camera intrinsics estimate (null before the first result). */
@@ -472,7 +483,11 @@ export class Tracear {
             instSpeed = Math.hypot(dp[0], dp[1], dp[2]) / dt;
             instAngSpeed = quatAngle(update.pose.rawQuaternion, prev.pose.rawQuaternion) / dt;
           }
-          this.lastPoses[i] = { pose: update.pose, timestamp: msg.timestamp, instSpeed, instAngSpeed };
+          // EMA: single-frame speed spikes (pose noise at rest crosses any
+          // low threshold) must not flap the raw/filtered blend around.
+          const emaSpeed = prev ? prev.emaSpeed + 0.35 * (instSpeed - prev.emaSpeed) : instSpeed;
+          const emaAngSpeed = prev ? prev.emaAngSpeed + 0.35 * (instAngSpeed - prev.emaAngSpeed) : instAngSpeed;
+          this.lastPoses[i] = { pose: update.pose, timestamp: msg.timestamp, emaSpeed, emaAngSpeed };
         }
         state.misses = 0;
         if (!state.found) {
@@ -486,6 +501,7 @@ export class Tracear {
           state.found = false;
           state.misses = 0;
           this.lastPoses[i] = null;
+          this.renderQuats[i] = null;
           this.emitter.emit("targetLost", { index: i });
         }
       }
