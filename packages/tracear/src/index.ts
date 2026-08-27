@@ -270,16 +270,29 @@ export class Tracear {
     };
     // Thresholds sit safely above the at-rest noise floor of the raw-pose
     // speed estimate (~0.05 u/s), so alpha is EXACTLY zero on a still scene.
-    const alpha = Math.max(
+    const alphaSpeed = Math.max(
       smoothstep(lp.emaSpeed, 0.1, 0.5),
       smoothstep(lp.emaAngSpeed, 0.15, 0.8),
     );
+    // Error-adaptive catch-up: whenever the rendered (filtered) pose has
+    // visibly diverged from the raw measurement — after a fast move, a
+    // re-acquire, or the marker itself moving — snap toward raw NOW instead
+    // of easing back at the filter's own pace. Position error is measured
+    // relative to depth (screen-proportional); both floors sit above the
+    // at-rest noise level, so a still scene stays frozen.
+    const dp = [
+      pose.rawPosition[0] - pose.position[0],
+      pose.rawPosition[1] - pose.position[1],
+      pose.rawPosition[2] - pose.position[2],
+    ];
+    const relPosErr = Math.hypot(dp[0], dp[1], dp[2]) / Math.max(Math.abs(pose.position[2]), 0.2);
+    const rotErr = quatAngle(pose.quaternion, pose.rawQuaternion);
+    const alpha = Math.max(alphaSpeed, smoothstep(relPosErr, 0.004, 0.02));
     // Rotation blends far more conservatively than translation: planar-pose
     // estimation has a rotation ambiguity whose noise makes raw orientation
     // wobble visibly, while a little rotational lag is imperceptible.
-    // Translation is homography-anchored (low noise) and its lag reads as
-    // the content sliding off the target — the exact opposite trade-off.
-    const alphaRot = alpha * 0.35;
+    // Its own error term still pulls hard when orientation truly diverged.
+    const alphaRot = Math.max(alphaSpeed * 0.35, smoothstep(rotErr, 0.035, 0.12));
     const basePos: Vec3 = [
       pose.position[0] + (pose.rawPosition[0] - pose.position[0]) * alpha,
       pose.position[1] + (pose.rawPosition[1] - pose.position[1]) * alpha,
