@@ -116,13 +116,34 @@ pub fn pose_from_homography(h_obj: &Matrix3<f64>, k: &Intrinsics) -> Option<Pose
     })
 }
 
-fn reprojection_error_sq(pose: &Pose, k: &Intrinsics, obj: &[Vector3<f64>], img: &[(f64, f64)]) -> f64 {
+/// Rotation-prior weight in px/rad: how many pixels of reprojection error
+/// one radian of deviation from the previous rotation "costs". The balance:
+/// in-plane rotation has ~100 px/rad data sensitivity (prior negligible);
+/// tilt has ~10-30 px/rad at moderate angles (prior smooths with ~130 ms
+/// time constant — wobble drops ~3x, real tilt still follows); the
+/// near-frontal ambiguity axis has almost none (prior pins it).
+const ROT_PRIOR_WEIGHT: f64 = 70.0;
+
+fn prior_residual(pose: &Pose, prior: &(UnitQuaternion<f64>, f64)) -> Vector3<f64> {
+    (prior.0.inverse() * pose.rotation).scaled_axis() * prior.1
+}
+
+fn total_cost(
+    pose: &Pose,
+    k: &Intrinsics,
+    obj: &[Vector3<f64>],
+    img: &[(f64, f64)],
+    prior: Option<&(UnitQuaternion<f64>, f64)>,
+) -> f64 {
     let mut e = 0.0;
     for (p, &(u, v)) in obj.iter().zip(img) {
         match project_point(pose, k, p) {
             Some((pu, pv)) => e += (pu - u).powi(2) + (pv - v).powi(2),
             None => return f64::INFINITY,
         }
+    }
+    if let Some(pr) = prior {
+        e += prior_residual(pose, pr).norm_squared();
     }
     e
 }
@@ -136,16 +157,20 @@ fn apply_delta(pose: &Pose, d: &Vector6<f64>) -> Pose {
 }
 
 /// Levenberg-Marquardt refinement with a numeric Jacobian (few points, cheap).
+/// `rot_prior` (previous rotation, weight in px/rad) regularizes the
+/// near-frontal planar-pose ambiguity: it only wins along directions the
+/// reprojection data cannot observe.
 pub fn refine_pose(
     pose: &Pose,
     k: &Intrinsics,
     obj: &[Vector3<f64>],
     img: &[(f64, f64)],
     iters: usize,
+    rot_prior: Option<(UnitQuaternion<f64>, f64)>,
 ) -> Pose {
     let n = obj.len();
     let mut cur = *pose;
-    let mut cur_err = reprojection_error_sq(&cur, k, obj, img);
+    let mut cur_err = total_cost(&cur, k, obj, img, rot_prior.as_ref());
     let mut lambda = 1e-3;
     let eps = 1e-6;
     for _ in 0..iters {
@@ -190,10 +215,28 @@ pub fn refine_pose(
         if !ok {
             break;
         }
+        if let Some(pr) = &rot_prior {
+            let r = prior_residual(&cur, pr);
+            let mut jrows = [Vector6::<f64>::zeros(); 3];
+            for p in 0..6 {
+                let mut dp = Vector6::<f64>::zeros();
+                dp[p] = eps;
+                let plus = prior_residual(&apply_delta(&cur, &dp), pr);
+                dp[p] = -eps;
+                let minus = prior_residual(&apply_delta(&cur, &dp), pr);
+                for c in 0..3 {
+                    jrows[c][p] = (plus[c] - minus[c]) / (2.0 * eps);
+                }
+            }
+            for c in 0..3 {
+                jtj += jrows[c] * jrows[c].transpose();
+                jtr += jrows[c] * r[c];
+            }
+        }
         let damped = jtj + Matrix6::identity() * lambda * jtj.trace().max(1e-12) / 6.0;
         let Some(step) = damped.lu().solve(&(-jtr)) else { break };
         let candidate = apply_delta(&cur, &step);
-        let err = reprojection_error_sq(&candidate, k, obj, img);
+        let err = total_cost(&candidate, k, obj, img, rot_prior.as_ref());
         if err < cur_err {
             cur = candidate;
             cur_err = err;
@@ -237,10 +280,11 @@ pub fn estimate_pose(
     let h_obj = h_marker * marker_from_object(marker_w, marker_h, phys_width);
     let decomposed = pose_from_homography(&h_obj, k)?;
     let init = match prev {
-        Some(p) if reprojection_error_sq(p, k, &obj, &img) < reprojection_error_sq(&decomposed, k, &obj, &img).max(400.0) => *p,
+        Some(p) if total_cost(p, k, &obj, &img, None) < total_cost(&decomposed, k, &obj, &img, None).max(400.0) => *p,
         _ => decomposed,
     };
-    let refined = refine_pose(&init, k, &obj, &img, 8);
+    let rot_prior = prev.map(|p| (p.rotation, ROT_PRIOR_WEIGHT));
+    let refined = refine_pose(&init, k, &obj, &img, 8, rot_prior);
     if !refined.translation.iter().all(|v| v.is_finite()) || refined.translation.z <= 0.0 {
         return None;
     }
@@ -381,7 +425,14 @@ mod tests {
             translation: gt.translation + Vector3::new(0.01, 0.005, -0.02),
         };
         let est = estimate_pose(&h, 320.0, 320.0, 1.0, &k, Some(&prev)).unwrap();
-        assert!(est.rotation.angle_to(&gt.rotation).to_degrees() < 0.1);
+        // The rotation prior intentionally biases toward prev a little (that
+        // bias is the ambiguity damping; with prev updated every frame it
+        // converges like an EMA). The estimate must still move most of the
+        // way from prev toward the data.
+        let prev_err = prev.rotation.angle_to(&gt.rotation).to_degrees();
+        let est_err = est.rotation.angle_to(&gt.rotation).to_degrees();
+        assert!(est_err < prev_err * 0.5, "est {est_err:.3} deg vs prev {prev_err:.3} deg");
+        assert!(est_err < 0.4, "est error {est_err:.3} deg");
     }
 
     #[test]
@@ -394,6 +445,44 @@ mod tests {
         let est = estimate_pose(&h, 320.0, 320.0, 0.2, &k, None).unwrap();
         let dt = (est.translation - gt.translation * 0.2).norm();
         assert!(dt < 0.01, "scaled translation error {dt:.4}");
+    }
+
+    #[test]
+    fn rotation_prior_damps_near_frontal_noise() {
+        use crate::homography::dlt;
+        use crate::rng::XorShift64;
+        let k = Intrinsics { fx: 500.0, fy: 500.0, cx: 320.0, cy: 240.0 };
+        // Near-frontal: rotation is weakly observable — the ambiguity regime.
+        let gt = Pose {
+            rotation: UnitQuaternion::from_scaled_axis(Vector3::new(0.06, -0.04, 0.0)),
+            translation: Vector3::new(0.05, 0.02, 2.2),
+        };
+        let h_clean = homography_for(&gt, &k, 320.0, 320.0, 1.0);
+        // Noisy homography, as one frame of tracking noise would produce it.
+        let mut rng = XorShift64::new(17);
+        let mut src = Vec::new();
+        let mut dst = Vec::new();
+        for gy in 0..5 {
+            for gx in 0..5 {
+                let mx = 320.0 * gx as f64 / 4.0;
+                let my = 320.0 * gy as f64 / 4.0;
+                let p = crate::homography::project(&h_clean, mx, my);
+                let (nx, ny) = rng.next_gaussian_pair();
+                src.push((mx, my));
+                dst.push((p.0 + nx * 0.4, p.1 + ny * 0.4));
+            }
+        }
+        let h_noisy = dlt(&src, &dst).unwrap();
+        let est_no = estimate_pose(&h_noisy, 320.0, 320.0, 1.0, &k, None).unwrap();
+        let est_pr = estimate_pose(&h_noisy, 320.0, 320.0, 1.0, &k, Some(&gt)).unwrap();
+        let e_no = est_no.rotation.angle_to(&gt.rotation).to_degrees();
+        let e_pr = est_pr.rotation.angle_to(&gt.rotation).to_degrees();
+        assert!(
+            e_pr < e_no * 0.5,
+            "prior should damp ambiguity noise: without {e_no:.3} deg vs with {e_pr:.3} deg"
+        );
+        // The prior must not distort position.
+        assert!((est_pr.translation - gt.translation).norm() < 0.05);
     }
 
     #[test]

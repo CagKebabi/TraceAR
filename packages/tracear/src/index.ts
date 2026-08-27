@@ -6,15 +6,7 @@
  * API; `poseAt` stays null until M3.
  */
 import { Emitter } from "./events";
-import {
-  mat4FromPose,
-  quatAngle,
-  quatFromScaledAxis,
-  quatMultiply,
-  quatSlerp,
-  type Quat,
-  type Vec3,
-} from "./math";
+import { mat4FromPose, quatAngle, quatSlerp, type Quat, type Vec3 } from "./math";
 import type { ReadyMessage, ResultMessage, ErrorMessage } from "./worker";
 
 export type Homography = Float64Array;
@@ -291,15 +283,17 @@ export class Tracear {
     ];
     const baseQ = quatSlerp(pose.quaternion, pose.rawQuaternion, alphaRot);
 
-    // Extrapolate over the pipeline latency, plus the filter's group delay
-    // for whatever share of the pose still comes from the filtered signal.
+    // Extrapolate TRANSLATION over the pipeline latency plus the filter's
+    // group delay for whatever share still comes from the filtered signal.
+    // Rotation is deliberately NOT extrapolated: the planar-pose ambiguity
+    // puts fake rad/s into the angular-velocity estimate, and predicting
+    // with it manufactures wobble far worse than the imperceptible lag it
+    // would remove.
     const latency = Math.min(Math.max((timestamp - lp.timestamp) / 1000, 0), 0.1);
     const dtPos = Math.min(latency + (1 - alpha) * pose.posLagS, 0.25);
-    const dtRot = Math.min(latency + (1 - alphaRot) * pose.rotLagS, 0.25);
     // Deadband: velocity estimates are never exactly zero — do not let their
     // noise wiggle a still scene. Clamp: never extrapolate absurdly far.
     const v = pose.velocity.map((x) => (Math.abs(x) < 0.01 ? 0 : x)) as Vec3;
-    const w = pose.angularVelocity.map((x) => (Math.abs(x) < 0.015 ? 0 : x)) as Vec3;
     const step = Math.hypot(v[0], v[1], v[2]) * dtPos;
     const posScale = step > 0.2 ? 0.2 / step : 1;
     const p: Vec3 = [
@@ -307,11 +301,7 @@ export class Tracear {
       basePos[1] + v[1] * dtPos * posScale,
       basePos[2] + v[2] * dtPos * posScale,
     ];
-    const angle = Math.hypot(w[0], w[1], w[2]) * dtRot;
-    const rotScale = angle > 0.3 ? 0.3 / angle : 1;
-    const dq = quatFromScaledAxis([w[0] * dtRot * rotScale, w[1] * dtRot * rotScale, w[2] * dtRot * rotScale]);
-    const q = quatMultiply(baseQ, dq);
-    return mat4FromPose(q, p);
+    return mat4FromPose(baseQ, p);
   }
 
   /** Latest camera intrinsics estimate (null before the first result). */
