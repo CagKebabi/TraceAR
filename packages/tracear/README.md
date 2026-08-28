@@ -11,11 +11,14 @@ gives you a filtered 6DoF pose to hang 3D content on — built as a lean
 Rust→WASM(+SIMD) engine with sub-pixel frame-to-frame tracking, online camera
 self-calibration, and render-time pose prediction.
 
-Measured against MindAR on the same phone, same marker, same metric
-(median jitter of the marker center, 640 px frame): **1.9 px vs 5.5 px** —
-about 3× steadier — with ~2.5 ms/frame of CV time while tracking and
-detection around 20 ms. Compile a 512 px marker in ~0.1 s to a ~170 KB file
-(MindAR: ~1.4 s, ~420 KB). SDK weight: **~92 KB gzipped** including WASM.
+Measured side by side with [MindAR](https://github.com/hiukim/mind-ar-js) —
+the pioneering project in this space, which takes a different engineering
+approach — on the same phone, same marker, identical metric (median jitter
+of the marker center, 640 px frame): **1.9 px vs 5.5 px**, with
+~2.5 ms/frame of CV time while tracking and detection around 20 ms. A
+512 px marker compiles in ~0.1 s to a ~170 KB file. SDK weight:
+**~95 KB gzipped** including WASM. The comparison is reproducible on your
+own device with the repo's `apps/compare`.
 
 > Status: **0.1 — early but real.** Android Chrome + iOS Safari 16.4+.
 > APIs may still move before 1.0.

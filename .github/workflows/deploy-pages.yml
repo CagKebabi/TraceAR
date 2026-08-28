@@ -1,0 +1,73 @@
+name: Deploy Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Build WASM
+        run: wasm-pack build core/tracear-wasm --release --target web --no-pack --out-dir ../../packages/tracear/src/wasm
+
+      - name: npm install
+        run: npm install
+
+      - name: Build SDK
+        run: npm run build:sdk
+
+      - name: Build demo
+        run: npm run build --workspace tracear-demo
+        env:
+          BASE_PATH: /TraceAR/demo/
+
+      - name: Build compare
+        run: npm run build --workspace tracear-compare
+        env:
+          BASE_PATH: /TraceAR/compare/
+
+      - name: Assemble site
+        run: |
+          mkdir -p site
+          cp -r apps/landing/* site/
+          cp -r apps/demo/dist site/demo
+          cp -r apps/compare/dist site/compare
+
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

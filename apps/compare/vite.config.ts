@@ -2,6 +2,8 @@ import { defineConfig } from "vite";
 import basicSsl from "@vitejs/plugin-basic-ssl";
 
 export default defineConfig({
+  // Deploys under a sub-path on GitHub Pages (see deploy-pages workflow).
+  base: process.env.BASE_PATH ?? "/",
   // Self-signed HTTPS so getUserMedia works from phones on the LAN;
   // NO_SSL=1 for a cert-warning-free local loop (localhost is secure).
   plugins: [process.env.NO_SSL ? undefined : basicSsl()].filter(Boolean),

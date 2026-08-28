@@ -8,6 +8,9 @@
     "apps/*",
     "bench"
   ],
+  "overrides": {
+    "canvas": "npm:empty-npm-package@1.0.0"
+  },
   "scripts": {
     "test:core": "cd core && cargo test",
     "build:wasm": "wasm-pack build core/tracear-wasm --release --target web --no-pack --out-dir ../../packages/tracear/src/wasm",

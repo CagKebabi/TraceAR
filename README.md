@@ -7,9 +7,17 @@
 
 **High-performance, jitter-free image tracking for the mobile web.**
 
-Tracear is a web AR engine focused on doing one thing extremely well: tracking a
+TraceAR is a web AR engine focused on doing one thing extremely well: tracking a
 known image target with a phone camera in the browser — smoothly, with low
 latency, on both Android and iOS.
+
+## Try it now
+
+No install needed — scan with your phone (or open on any device with a camera):
+
+| [**Live demo →**](https://cagkebabi.github.io/TraceAR/demo/) | [**Side-by-side with MindAR →**](https://cagkebabi.github.io/TraceAR/compare/) |
+|---|---|
+| <img src="apps/landing/assets/qr-demo.png" width="150" alt="QR: live demo" /> | <img src="apps/landing/assets/qr-compare.png" width="150" alt="QR: comparison" /> |
 
 ```sh
 npm i @tracear/sdk
@@ -26,18 +34,23 @@ await tracker.start();
 Full quickstart, three.js recipe and the marker compiler:
 **[packages/tracear →](packages/tracear#readme)**
 
-## Measured against MindAR
+## How it compares
 
-Same phone, same marker, same metric — reproduce it yourself with the
-side-by-side app in [`apps/compare`](apps/compare):
+[MindAR](https://github.com/hiukim/mind-ar-js) is the pioneering open-source
+web image tracker and a big part of why web AR exists at all — TraceAR simply
+makes different engineering trade-offs (a hand-written WASM core instead of a
+general ML runtime, sub-pixel tracking instead of per-frame detection). The
+numbers below were measured on the same phone, same marker, with an identical
+metric — and you can reproduce them on your own device with the side-by-side
+app in [`apps/compare`](apps/compare):
 
-| | **Tracear** | MindAR |
+| | **TraceAR** | MindAR |
 |---|---|---|
-| median jitter (640 px frame) | **1.90 px** | 5.47 px |
-| p90 jitter | **5.8 px** | 8.3 px |
-| CV time / frame (tracking) | **~2.5 ms** | n/a (not exposed) |
-| marker compile (512 px) | **0.1 s / 169 KB** | 1.4 s / 418 KB |
-| SDK size (gzipped, incl. WASM) | **~95 KB** | ~370 KB+ (tfjs) |
+| median jitter (640 px frame) | 1.90 px | 5.47 px |
+| p90 jitter | 5.8 px | 8.3 px |
+| CV time / frame (tracking) | ~2.5 ms | n/a (not exposed) |
+| marker compile (512 px) | 0.1 s / 169 KB | 1.4 s / 418 KB |
+| SDK size (gzipped, incl. WASM) | ~95 KB | ~370 KB (tfjs runtime) |
 
 > Phase 1 (image tracking) complete; APIs may still move before 1.0.
 

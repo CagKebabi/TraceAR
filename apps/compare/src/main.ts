@@ -201,7 +201,7 @@ async function prepareMarker(canvas: HTMLCanvasElement, label: string): Promise<
   tracearBytes = res.data;
   const tracearMs = performance.now() - t0;
 
-  markerStatus.textContent = `${label}: compiling for MindAR (their compiler is slow — hang on)…`;
+  markerStatus.textContent = `${label}: compiling for MindAR (its compiler does deeper offline work — takes a moment)…`;
   const { Compiler } = await import("mind-ar/dist/mindar-image.prod.js");
   const img = new Image();
   img.src = canvas.toDataURL("image/png");
