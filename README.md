@@ -8,6 +8,7 @@
 **High-performance, jitter-free image tracking for the mobile web.**
 
 **Website: [cagkebabi.github.io/TraceAR](https://cagkebabi.github.io/TraceAR/)** ·
+[Docs](https://cagkebabi.github.io/TraceAR/docs/) ·
 [Live demo](https://cagkebabi.github.io/TraceAR/demo/) ·
 [Compare with MindAR](https://cagkebabi.github.io/TraceAR/compare/)
 

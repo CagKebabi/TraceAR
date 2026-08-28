@@ -59,12 +59,16 @@ jobs:
         env:
           BASE_PATH: /TraceAR/compare/
 
+      - name: Build docs
+        run: npm run build:docs
+
       - name: Assemble site
         run: |
           mkdir -p site
           cp -r apps/landing/* site/
           cp -r apps/demo/dist site/demo
           cp -r apps/compare/dist site/compare
+          cp -r apps/docs/.vitepress/dist site/docs
 
       - uses: actions/configure-pages@v5
         with:

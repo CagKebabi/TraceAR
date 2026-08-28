@@ -6,6 +6,10 @@
 
 **High-performance, jitter-free image tracking for the mobile web.**
 
+**[Documentation](https://cagkebabi.github.io/TraceAR/docs/)** ·
+[Website](https://cagkebabi.github.io/TraceAR/) ·
+[Live demo](https://cagkebabi.github.io/TraceAR/demo/)
+
 Tracear tracks known image targets with the phone camera, in the browser, and
 gives you a filtered 6DoF pose to hang 3D content on — built as a lean
 Rust→WASM(+SIMD) engine with sub-pixel frame-to-frame tracking, online camera

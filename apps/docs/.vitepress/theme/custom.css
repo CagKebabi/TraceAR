@@ -1,0 +1,38 @@
+/* TraceAR brand on top of the VitePress default theme (forced dark). */
+
+:root {
+  --vp-c-brand-1: #8a87ff;
+  --vp-c-brand-2: #6d63ff;
+  --vp-c-brand-3: #4945ff;
+  --vp-c-brand-soft: rgba(73, 69, 255, 0.16);
+
+  --vp-c-bg: #0b0b14;
+  --vp-c-bg-alt: #08080f;
+  --vp-c-bg-soft: #12121e;
+  --vp-c-bg-elv: #12121e;
+  --vp-c-divider: rgba(118, 117, 150, 0.28);
+  --vp-c-gutter: rgba(118, 117, 150, 0.28);
+
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(120deg, #8a87ff 20%, #c79bff);
+  --vp-home-hero-image-background-image: linear-gradient(
+    -45deg,
+    rgba(73, 69, 255, 0.55) 40%,
+    rgba(109, 47, 242, 0.45) 60%
+  );
+  --vp-home-hero-image-filter: blur(56px);
+
+  --vp-button-brand-bg: #4945ff;
+  --vp-button-brand-hover-bg: #5b57ff;
+  --vp-button-brand-active-bg: #3f3bde;
+}
+
+.VPFeature {
+  border: 1px solid rgba(118, 117, 150, 0.22);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.vp-doc th,
+.vp-doc td {
+  border-color: rgba(118, 117, 150, 0.28);
+}

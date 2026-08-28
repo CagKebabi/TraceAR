@@ -16,7 +16,9 @@
     "build:wasm": "wasm-pack build core/tracear-wasm --release --target web --no-pack --out-dir ../../packages/tracear/src/wasm",
     "build:sdk": "npm run build --workspace @tracear/sdk",
     "demo": "npm run dev --workspace tracear-demo",
-    "compare": "npm run dev --workspace tracear-compare"
+    "compare": "npm run dev --workspace tracear-compare",
+    "docs": "npm run dev --workspace tracear-docs",
+    "build:docs": "npm run build --workspace tracear-docs"
   },
   "license": "MIT"
 }
