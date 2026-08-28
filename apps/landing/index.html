@@ -16,17 +16,17 @@
     />
     <style>
       :root {
-        --bg: #0b0b14;
-        --panel: #101120;
-        --panel-2: #14152a;
-        --border: #23243d;
+        --bg: #0b0b16;
+        --panel: rgba(16, 17, 32, 0.55);
+        --border: #26273f;
         --text: #ffffff;
         --muted: #8e90a9;
         --accent: #4945ff;
         --accent-hover: #5d5aff;
+        --violet: #7a3bfa;
         --accent-soft: rgba(73, 69, 255, 0.14);
         --green: #46d29e;
-        --radius: 14px;
+        --radius: 16px;
       }
       * {
         box-sizing: border-box;
@@ -43,66 +43,181 @@
         line-height: 1.6;
       }
       .wrap {
-        max-width: 1120px;
+        max-width: 1180px;
         margin: 0 auto;
-        padding: 0 22px;
+        padding: 0 24px;
       }
 
-      /* ------------------------------- nav ------------------------------- */
-      nav {
+      /* --------------------------- announcement --------------------------- */
+      .banner {
+        height: 52px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        background: linear-gradient(90deg, #6d2ff2, #8a3ffc 50%, #6d2ff2);
+        color: #fff;
+        font-size: 0.86rem;
+        position: relative;
+        padding: 0 44px;
+        text-align: center;
+      }
+      .banner a {
+        color: #fff;
+        font-weight: 500;
+        text-decoration: underline;
+        text-underline-offset: 3px;
+      }
+      .banner .close {
+        position: absolute;
+        right: 14px;
+        top: 50%;
+        transform: translateY(-50%);
+        background: none;
+        border: none;
+        color: rgba(255, 255, 255, 0.85);
+        font-size: 1.05rem;
+        cursor: pointer;
+        padding: 4px 8px;
+      }
+      .banner .close:hover {
+        color: #fff;
+      }
+
+      /* ------------------------------- header ----------------------------- */
+      header.top {
         position: sticky;
         top: 0;
-        z-index: 10;
-        background: rgba(11, 11, 20, 0.85);
-        backdrop-filter: blur(12px);
-        border-bottom: 1px solid var(--border);
+        z-index: 20;
+        background: rgba(11, 11, 22, 0.82);
+        backdrop-filter: blur(14px);
       }
       .nav-in {
         display: flex;
         align-items: center;
-        gap: 26px;
-        height: 64px;
+        gap: 8px;
+        height: 80px;
       }
       .logo {
         display: flex;
         align-items: center;
-        gap: 9px;
+        gap: 10px;
         font-weight: 600;
-        font-size: 1.15rem;
+        font-size: 1.35rem;
+        letter-spacing: -0.01em;
         color: var(--text);
         text-decoration: none;
+        margin-right: 18px;
       }
       .logo svg {
         display: block;
       }
       .nav-links {
         display: flex;
-        gap: 22px;
-        font-size: 0.9rem;
+        align-items: center;
+        gap: 4px;
+        font-size: 0.92rem;
       }
-      .nav-links a {
-        color: var(--muted);
+      .nav-item {
+        position: relative;
+      }
+      .nav-item > a {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        color: #d6d7e6;
         text-decoration: none;
+        padding: 9px 13px;
+        border-radius: 9px;
       }
-      .nav-links a:hover {
-        color: var(--text);
+      .nav-item > a:hover {
+        background: rgba(255, 255, 255, 0.06);
+        color: #fff;
       }
-      .nav-cta {
+      .nav-item .chev {
+        font-size: 0.62rem;
+        color: var(--muted);
+        transition: transform 0.15s;
+      }
+      .menu {
+        position: absolute;
+        top: calc(100% + 6px);
+        left: 6px;
+        min-width: 220px;
+        background: #14152a;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 8px;
+        display: none;
+        box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+      }
+      .nav-item:hover .menu,
+      .nav-item:focus-within .menu {
+        display: block;
+      }
+      .nav-item:hover .chev {
+        transform: rotate(180deg);
+      }
+      .menu a {
+        display: block;
+        padding: 9px 12px;
+        border-radius: 8px;
+        color: #d6d7e6;
+        text-decoration: none;
+        font-size: 0.88rem;
+      }
+      .menu a:hover {
+        background: rgba(255, 255, 255, 0.06);
+        color: #fff;
+      }
+      .menu a small {
+        display: block;
+        color: var(--muted);
+        font-size: 0.74rem;
+        font-weight: 400;
+      }
+      .nav-right {
         margin-left: auto;
         display: flex;
-        gap: 10px;
+        align-items: center;
+        gap: 12px;
+      }
+      .gh-chip {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: #d6d7e6;
+        text-decoration: none;
+        font-size: 0.88rem;
+        padding: 8px 12px;
+        border-radius: 9px;
+      }
+      .gh-chip:hover {
+        background: rgba(255, 255, 255, 0.06);
+        color: #fff;
+      }
+      .gh-chip svg {
+        display: block;
       }
       .btn {
         display: inline-flex;
         align-items: center;
+        justify-content: center;
         gap: 8px;
         border-radius: 10px;
-        padding: 9px 18px;
-        font-size: 0.9rem;
+        padding: 11px 20px;
+        font-size: 0.92rem;
         font-weight: 500;
         text-decoration: none;
         border: 1px solid transparent;
-        transition: background 0.15s, border-color 0.15s;
+        transition: background 0.15s, border-color 0.15s, color 0.15s;
+      }
+      .btn-white {
+        background: #ffffff;
+        color: #14152a;
+      }
+      .btn-white:hover {
+        background: #e9e9f4;
       }
       .btn-primary {
         background: var(--accent);
@@ -119,155 +234,183 @@
         border-color: var(--muted);
       }
 
-      /* ------------------------------- hero ------------------------------ */
-      .hero {
+      /* -------------------------------- hero ------------------------------ */
+      .hero-bg {
         position: relative;
         overflow: hidden;
       }
-      .hero::before {
+      .hero-bg::before {
         content: "";
         position: absolute;
-        inset: -40% -20% auto;
-        height: 130%;
+        inset: -30% -10% auto;
+        height: 120%;
         background:
-          radial-gradient(600px 420px at 18% 30%, rgba(73, 69, 255, 0.22), transparent 65%),
-          radial-gradient(520px 380px at 85% 15%, rgba(122, 76, 255, 0.12), transparent 60%);
+          radial-gradient(640px 460px at 12% 20%, rgba(109, 47, 242, 0.28), transparent 62%),
+          radial-gradient(560px 400px at 88% 8%, rgba(73, 69, 255, 0.14), transparent 60%);
         pointer-events: none;
       }
-      .hero-in {
+      .hero-panel {
         position: relative;
-        display: grid;
-        grid-template-columns: 1.15fr 0.85fr;
-        gap: 46px;
-        padding: 84px 0 72px;
-        align-items: center;
-      }
-      .eyebrow {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
+        margin-top: 26px;
         border: 1px solid var(--border);
+        border-radius: var(--radius);
         background: var(--panel);
-        border-radius: 999px;
-        padding: 5px 14px;
-        font-size: 0.78rem;
-        color: var(--muted);
-        margin-bottom: 22px;
+        overflow: hidden;
       }
-      .eyebrow .dot {
-        width: 7px;
-        height: 7px;
-        border-radius: 50%;
-        background: var(--green);
+      .hero-grid {
+        display: grid;
+        grid-template-columns: 1.08fr 0.92fr;
+      }
+      .hero-left {
+        padding: 64px 56px 58px;
       }
       h1 {
-        font-size: clamp(2rem, 4.6vw, 3.1rem);
+        font-size: 43px;
+        line-height: 1.25;
+        letter-spacing: -1.075px;
         font-weight: 600;
-        line-height: 1.18;
-        letter-spacing: -0.01em;
       }
-      h1 .accent {
-        color: var(--accent-hover);
-        border-right: 3px solid var(--accent-hover);
-        padding-right: 4px;
-        animation: caret 1.1s step-end infinite;
+      .typed-box {
+        display: inline-block;
+        border: 1px solid rgba(138, 63, 252, 0.65);
+        border-radius: 8px;
+        padding: 0 10px 2px;
+        color: #fff;
+        min-width: 40px;
       }
-      @keyframes caret {
+      .typed-box .caret {
+        display: inline-block;
+        width: 2px;
+        height: 0.95em;
+        background: #b195ff;
+        vertical-align: -0.12em;
+        margin-left: 2px;
+        animation: blink 1.05s step-end infinite;
+      }
+      @keyframes blink {
         50% {
-          border-color: transparent;
+          opacity: 0;
         }
       }
-      .hero-sub {
-        color: var(--muted);
-        margin: 18px 0 30px;
-        max-width: 46ch;
-      }
       .install {
+        margin-top: 44px;
         display: inline-flex;
         align-items: center;
-        gap: 16px;
-        background: linear-gradient(120deg, rgba(73, 69, 255, 0.16), rgba(122, 76, 255, 0.08));
-        border: 1px solid rgba(93, 90, 255, 0.45);
+        gap: 42px;
+        background: linear-gradient(110deg, rgba(109, 47, 242, 0.38), rgba(73, 69, 255, 0.16) 70%);
+        border: 1px solid rgba(138, 99, 255, 0.55);
         border-radius: 12px;
-        padding: 13px 18px;
+        padding: 15px 20px;
         font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
-        font-size: 0.95rem;
+        font-size: 0.98rem;
+        box-shadow: 0 0 34px rgba(109, 47, 242, 0.22);
       }
       .install button {
         background: none;
         border: none;
-        color: var(--muted);
+        color: #c9baf7;
         cursor: pointer;
-        font-size: 1rem;
+        font-size: 1.05rem;
         padding: 0;
       }
       .install button:hover {
-        color: var(--text);
+        color: #fff;
       }
       .hero-alt {
-        margin-top: 14px;
-        font-size: 0.88rem;
+        margin-top: 20px;
+        font-size: 0.9rem;
         color: var(--muted);
+        display: flex;
+        align-items: center;
+        gap: 8px;
       }
       .hero-alt a {
-        color: var(--text);
+        color: #fff;
+        font-weight: 500;
         text-decoration: none;
-        border-bottom: 1px solid var(--border);
       }
       .hero-alt a:hover {
-        border-color: var(--text);
+        text-decoration: underline;
+        text-underline-offset: 3px;
       }
 
-      /* metric grid (hero right) */
-      .metrics {
-        border: 1px solid var(--border);
-        border-radius: var(--radius);
-        background: rgba(16, 17, 32, 0.6);
-        overflow: hidden;
+      .hero-right {
+        border-left: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
       }
-      .metrics .cap {
-        padding: 18px 22px;
-        font-size: 0.85rem;
-        color: var(--muted);
+      .hero-right .cap {
+        padding: 26px 30px;
+        font-size: 0.9rem;
+        color: #c3c5d9;
         text-align: center;
         border-bottom: 1px solid var(--border);
       }
-      .metrics-grid {
+      .facts {
+        flex: 1;
         display: grid;
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: repeat(3, 1fr);
+        grid-template-rows: 1fr 1fr;
       }
-      .metric {
-        padding: 26px 20px;
-        text-align: center;
+      .fact {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 3px;
+        padding: 22px 12px;
         border-right: 1px solid var(--border);
         border-bottom: 1px solid var(--border);
+        text-align: center;
       }
-      .metric:nth-child(2n) {
+      .fact:nth-child(3n) {
         border-right: none;
       }
-      .metric:nth-child(n + 3) {
+      .fact:nth-child(n + 4) {
         border-bottom: none;
       }
-      .metric b {
-        display: block;
-        font-size: 1.55rem;
+      .fact b {
+        font-size: 1.32rem;
         font-weight: 600;
       }
-      .metric span {
-        font-size: 0.78rem;
+      .fact span {
+        font-size: 0.72rem;
         color: var(--muted);
+        line-height: 1.35;
+      }
+
+      .hero-tabs {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        border-top: 1px solid var(--border);
+      }
+      .hero-tabs a {
+        padding: 17px 10px;
+        text-align: center;
+        font-size: 0.92rem;
+        color: var(--muted);
+        text-decoration: none;
+        border-right: 1px solid var(--border);
+      }
+      .hero-tabs a:last-child {
+        border-right: none;
+      }
+      .hero-tabs a:hover,
+      .hero-tabs a.active {
+        color: #fff;
+        font-weight: 500;
       }
 
       /* ----------------------------- sections ---------------------------- */
       section {
-        padding: 72px 0 8px;
+        padding: 76px 0 8px;
       }
       .sec-head {
-        max-width: 620px;
+        max-width: 640px;
         margin-bottom: 40px;
       }
       .kicker {
-        color: var(--accent-hover);
+        color: #a48fff;
         font-size: 0.8rem;
         font-weight: 600;
         text-transform: uppercase;
@@ -278,6 +421,7 @@
         font-size: clamp(1.5rem, 3vw, 2.1rem);
         font-weight: 600;
         line-height: 1.25;
+        letter-spacing: -0.02em;
       }
       .sec-head p {
         color: var(--muted);
@@ -304,7 +448,7 @@
         align-items: center;
         justify-content: center;
         margin-bottom: 16px;
-        color: var(--accent-hover);
+        color: #a48fff;
       }
       .card h3 {
         font-size: 1.02rem;
@@ -316,7 +460,6 @@
         color: var(--muted);
       }
 
-      /* try-it cards */
       .try {
         display: grid;
         grid-template-columns: 1fr 1fr;
@@ -339,7 +482,6 @@
         margin-top: 14px;
       }
 
-      /* comparison table */
       .compare-panel {
         background: var(--panel);
         border: 1px solid var(--border);
@@ -380,9 +522,8 @@
         color: var(--text);
       }
 
-      /* code */
       .code-card {
-        background: #0d0e1c;
+        background: #0d0e1e;
         border: 1px solid var(--border);
         border-radius: var(--radius);
         overflow: hidden;
@@ -450,10 +591,25 @@
         color: var(--text);
       }
 
-      @media (max-width: 860px) {
-        .hero-in {
+      @media (max-width: 920px) {
+        .hero-grid {
           grid-template-columns: 1fr;
-          padding-top: 56px;
+        }
+        .hero-left {
+          padding: 44px 28px 40px;
+        }
+        .hero-right {
+          border-left: none;
+          border-top: 1px solid var(--border);
+        }
+        .hero-tabs {
+          grid-template-columns: 1fr 1fr;
+        }
+        .hero-tabs a:nth-child(2n) {
+          border-right: none;
+        }
+        .hero-tabs a:nth-child(-n + 2) {
+          border-bottom: 1px solid var(--border);
         }
         .cards3,
         .try {
@@ -462,59 +618,106 @@
         .nav-links {
           display: none;
         }
+        h1 {
+          font-size: 33px;
+        }
       }
     </style>
   </head>
   <body>
-    <nav>
+    <div class="banner" id="banner">
+      <span>
+        ✨ <a href="https://github.com/CagKebabi/TraceAR/releases/tag/v0.1.2">@tracear/sdk 0.1.2 is out</a>
+        — sub-pixel image tracking for the mobile web ✨
+      </span>
+      <button class="close" id="banner-close" aria-label="Dismiss">✕</button>
+    </div>
+
+    <header class="top">
       <div class="wrap nav-in">
         <a class="logo" href="#">
-          <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-            <rect x="1" y="1" width="20" height="20" rx="5" fill="#4945ff" />
-            <rect x="6.5" y="6.5" width="9" height="9" rx="2" fill="white" opacity="0.92" />
+          <svg width="26" height="26" viewBox="0 0 26 26" fill="none">
+            <rect x="1" y="1" width="24" height="24" rx="6.5" fill="#4945ff" />
+            <rect x="8" y="8" width="10" height="10" rx="2.5" fill="white" opacity="0.94" />
           </svg>
           tracear
         </a>
         <div class="nav-links">
-          <a href="#features">Engine</a>
-          <a href="#try">Live demo</a>
-          <a href="#compare">Benchmarks</a>
-          <a href="#quickstart">Quickstart</a>
+          <div class="nav-item">
+            <a href="#features">Engine <span class="chev">▼</span></a>
+            <div class="menu">
+              <a href="#features">Sub-pixel tracking<small>why it doesn't jitter</small></a>
+              <a href="#features">Self-calibrating pose<small>6DoF without setup</small></a>
+              <a href="#compare">Benchmarks<small>measured on real phones</small></a>
+            </div>
+          </div>
+          <div class="nav-item">
+            <a href="#try">Live demo</a>
+          </div>
+          <div class="nav-item">
+            <a href="#quickstart">Quickstart</a>
+          </div>
+          <div class="nav-item">
+            <a href="https://github.com/CagKebabi/TraceAR">Developers <span class="chev">▼</span></a>
+            <div class="menu">
+              <a href="https://github.com/CagKebabi/TraceAR">GitHub repository<small>Rust core + TypeScript SDK</small></a>
+              <a href="https://www.npmjs.com/package/@tracear/sdk">npm package<small>@tracear/sdk</small></a>
+              <a href="https://github.com/CagKebabi/TraceAR/releases">Releases<small>changelogs & notes</small></a>
+            </div>
+          </div>
         </div>
-        <div class="nav-cta">
-          <a class="btn btn-ghost" href="https://github.com/CagKebabi/TraceAR">GitHub</a>
+        <div class="nav-right">
+          <a class="gh-chip" href="https://github.com/CagKebabi/TraceAR" title="Star on GitHub">
+            <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z" />
+            </svg>
+            <span id="gh-stars">Star</span>
+          </a>
+          <a class="btn btn-white" href="demo/">Live Demo</a>
           <a class="btn btn-primary" href="https://www.npmjs.com/package/@tracear/sdk">Get Started</a>
         </div>
       </div>
-    </nav>
+    </header>
 
-    <header class="hero">
-      <div class="wrap hero-in">
-        <div>
-          <span class="eyebrow"><span class="dot"></span> Open-source WebAR engine · MIT</span>
-          <h1>Image tracking that finally feels <span class="accent">glued on</span></h1>
-          <p class="hero-sub">
-            A Rust→WASM tracking core for the browser: sub-pixel patch alignment, self-calibrating
-            6DoF pose and motion-adaptive filtering — frozen when still, locked on while moving.
-            Android Chrome &amp; iOS Safari.
-          </p>
-          <div class="install">
-            <span id="install-cmd">npm i @tracear/sdk</span>
-            <button id="copy-install" title="Copy">⧉</button>
+    <div class="hero-bg">
+      <div class="wrap">
+        <div class="hero-panel">
+          <div class="hero-grid">
+            <div class="hero-left">
+              <h1>
+                Open-Source Image Tracking for Jitter-Free Web AR on
+                <br />
+                <span class="typed-box"><span id="typed"></span><span class="caret"></span></span>
+              </h1>
+              <div class="install">
+                <span>npm i @tracear/sdk</span>
+                <button id="copy-install" title="Copy">⧉</button>
+              </div>
+              <p class="hero-alt">
+                or <a href="demo/">Try the Live Camera Demo</a> — nothing to install
+              </p>
+            </div>
+            <div class="hero-right">
+              <div class="cap">Point a phone at print, posters or packaging — these numbers are from a real device.</div>
+              <div class="facts">
+                <div class="fact"><b>1.90 px</b><span>median jitter<br />640 px frame</span></div>
+                <div class="fact"><b>2.5 ms</b><span>CV time per<br />tracked frame</span></div>
+                <div class="fact"><b>~95 KB</b><span>SDK gzipped<br />WASM included</span></div>
+                <div class="fact"><b>0.1 s</b><span>marker compile<br />512 px image</span></div>
+                <div class="fact"><b>6DoF</b><span>self-calibrating<br />pose</span></div>
+                <div class="fact"><b>MIT</b><span>free for<br />commercial use</span></div>
+              </div>
+            </div>
           </div>
-          <p class="hero-alt">or point your phone at the <a href="demo/">live demo</a> — nothing to install.</p>
-        </div>
-        <div class="metrics">
-          <div class="cap">Measured on a real phone, mid-pan, 640&nbsp;px frames</div>
-          <div class="metrics-grid">
-            <div class="metric"><b>1.90 px</b><span>median jitter</span></div>
-            <div class="metric"><b>2.5 ms</b><span>CV time / tracked frame</span></div>
-            <div class="metric"><b>~95 KB</b><span>SDK gzipped, WASM included</span></div>
-            <div class="metric"><b>0.1 s</b><span>marker compile (512 px)</span></div>
+          <div class="hero-tabs">
+            <a class="active" href="#features">Sub-pixel Tracking</a>
+            <a href="#features">Self-calibrating Pose</a>
+            <a href="#try">Live Demo</a>
+            <a href="#compare">Benchmarks</a>
           </div>
         </div>
       </div>
-    </header>
+    </div>
 
     <section id="features">
       <div class="wrap">
@@ -659,6 +862,49 @@ renderer.<span class="tk-fn">setAnimationLoop</span>(() =&gt; {
     </footer>
 
     <script>
+      /* announcement banner dismissal */
+      const banner = document.getElementById("banner");
+      if (localStorage.getItem("tracear-banner-012") === "closed") banner.remove();
+      document.getElementById("banner-close")?.addEventListener("click", () => {
+        localStorage.setItem("tracear-banner-012", "closed");
+        banner.remove();
+      });
+
+      /* live GitHub star count (real number only — falls back to "Star") */
+      fetch("https://api.github.com/repos/CagKebabi/TraceAR")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => {
+          if (j && typeof j.stargazers_count === "number") {
+            const n = j.stargazers_count;
+            document.getElementById("gh-stars").textContent =
+              n >= 1000 ? (n / 1000).toFixed(1) + "k" : String(n);
+          }
+        })
+        .catch(() => {});
+
+      /* typewriter */
+      const WORDS = ["Posters", "Packaging", "Book Covers", "Trading Cards", "Murals"];
+      const typed = document.getElementById("typed");
+      let wi = 0, ci = 0, deleting = false;
+      const tick = () => {
+        const w = WORDS[wi];
+        typed.textContent = w.slice(0, ci);
+        let delay = deleting ? 45 : 95;
+        if (!deleting && ci === w.length) {
+          delay = 1700;
+          deleting = true;
+        } else if (deleting && ci === 0) {
+          deleting = false;
+          wi = (wi + 1) % WORDS.length;
+          delay = 350;
+        } else {
+          ci += deleting ? -1 : 1;
+        }
+        setTimeout(tick, delay);
+      };
+      tick();
+
+      /* copy buttons */
       const copy = (btn, text, ok) => {
         navigator.clipboard.writeText(text).then(() => {
           const old = btn.textContent;
