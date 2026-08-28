@@ -162,6 +162,17 @@
         display: none;
         box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
       }
+      /* Invisible bridge over the 6px offset: without it, the cursor leaves
+         .nav-item while crossing the gap and the menu closes before a click
+         can land. */
+      .menu::before {
+        content: "";
+        position: absolute;
+        top: -8px;
+        left: -6px;
+        right: -6px;
+        height: 8px;
+      }
       .nav-item:hover .menu,
       .nav-item:focus-within .menu {
         display: block;
