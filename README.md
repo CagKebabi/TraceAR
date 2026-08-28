@@ -7,6 +7,10 @@
 
 **High-performance, jitter-free image tracking for the mobile web.**
 
+**Website: [cagkebabi.github.io/TraceAR](https://cagkebabi.github.io/TraceAR/)** ·
+[Live demo](https://cagkebabi.github.io/TraceAR/demo/) ·
+[Compare with MindAR](https://cagkebabi.github.io/TraceAR/compare/)
+
 TraceAR is a web AR engine focused on doing one thing extremely well: tracking a
 known image target with a phone camera in the browser — smoothly, with low
 latency, on both Android and iOS.

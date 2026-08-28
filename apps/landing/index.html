@@ -16,17 +16,16 @@
     />
     <style>
       :root {
-        --bg: #0b0b16;
-        --panel: rgba(16, 17, 32, 0.55);
-        --border: #26273f;
+        --page-bg: #131320;
+        --col-bg: #050512;
+        --line: rgba(118, 117, 150, 0.32);
+        --line-strong: rgba(118, 117, 150, 0.5);
         --text: #ffffff;
         --muted: #8e90a9;
         --accent: #4945ff;
         --accent-hover: #5d5aff;
-        --violet: #7a3bfa;
         --accent-soft: rgba(73, 69, 255, 0.14);
         --green: #46d29e;
-        --radius: 16px;
       }
       * {
         box-sizing: border-box;
@@ -36,16 +35,13 @@
         scroll-behavior: smooth;
       }
       body {
-        background: var(--bg);
+        background:
+          radial-gradient(900px 500px at 50% -100px, rgba(109, 47, 242, 0.16), transparent 70%),
+          var(--page-bg);
         color: var(--text);
         font-family: "Poppins", system-ui, -apple-system, sans-serif;
         font-size: 16px;
         line-height: 1.6;
-      }
-      .wrap {
-        max-width: 1180px;
-        margin: 0 auto;
-        padding: 0 24px;
       }
 
       /* --------------------------- announcement --------------------------- */
@@ -84,12 +80,25 @@
         color: #fff;
       }
 
+      /* ------------------------ the 1280px column ------------------------- */
+      .col {
+        max-width: 1280px;
+        margin: 0 auto;
+        background: var(--col-bg);
+        border-left: 1px solid var(--line-strong);
+        border-right: 1px solid var(--line-strong);
+        min-height: 100vh;
+      }
+      .inner {
+        padding: 0 40px;
+      }
+
       /* ------------------------------- header ----------------------------- */
       header.top {
         position: sticky;
         top: 0;
         z-index: 20;
-        background: rgba(11, 11, 22, 0.82);
+        background: rgba(5, 5, 18, 0.78);
         backdrop-filter: blur(14px);
       }
       .nav-in {
@@ -97,6 +106,7 @@
         align-items: center;
         gap: 8px;
         height: 80px;
+        padding: 0 24px;
       }
       .logo {
         display: flex;
@@ -143,9 +153,10 @@
         position: absolute;
         top: calc(100% + 6px);
         left: 6px;
-        min-width: 220px;
-        background: #14152a;
-        border: 1px solid var(--border);
+        min-width: 230px;
+        background: rgba(18, 19, 36, 0.92);
+        backdrop-filter: blur(16px);
+        border: 1px solid var(--line);
         border-radius: 12px;
         padding: 8px;
         display: none;
@@ -196,9 +207,6 @@
         background: rgba(255, 255, 255, 0.06);
         color: #fff;
       }
-      .gh-chip svg {
-        display: block;
-      }
       .btn {
         display: inline-flex;
         align-items: center;
@@ -227,7 +235,7 @@
         background: var(--accent-hover);
       }
       .btn-ghost {
-        border-color: var(--border);
+        border-color: var(--line);
         color: var(--text);
       }
       .btn-ghost:hover {
@@ -235,34 +243,30 @@
       }
 
       /* -------------------------------- hero ------------------------------ */
-      .hero-bg {
-        position: relative;
-        overflow: hidden;
-      }
-      .hero-bg::before {
-        content: "";
-        position: absolute;
-        inset: -30% -10% auto;
-        height: 120%;
-        background:
-          radial-gradient(640px 460px at 12% 20%, rgba(109, 47, 242, 0.28), transparent 62%),
-          radial-gradient(560px 400px at 88% 8%, rgba(73, 69, 255, 0.14), transparent 60%);
-        pointer-events: none;
-      }
       .hero-panel {
         position: relative;
-        margin-top: 26px;
-        border: 1px solid var(--border);
-        border-radius: var(--radius);
-        background: var(--panel);
+        margin: 18px 16px 0;
+        border: 1px solid var(--line);
+        border-radius: 16px;
         overflow: hidden;
       }
+      .hero-panel::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background:
+          radial-gradient(560px 340px at 0% 0%, rgba(109, 47, 242, 0.34), transparent 62%),
+          radial-gradient(420px 300px at 100% 0%, rgba(73, 69, 255, 0.14), transparent 60%);
+        pointer-events: none;
+      }
       .hero-grid {
+        position: relative;
         display: grid;
         grid-template-columns: 1.08fr 0.92fr;
       }
       .hero-left {
-        padding: 64px 56px 58px;
+        padding: 64px 56px;
+        border-right: 1px solid var(--line-strong);
       }
       h1 {
         font-size: 43px;
@@ -335,7 +339,6 @@
       }
 
       .hero-right {
-        border-left: 1px solid var(--border);
         display: flex;
         flex-direction: column;
       }
@@ -344,7 +347,7 @@
         font-size: 0.9rem;
         color: #c3c5d9;
         text-align: center;
-        border-bottom: 1px solid var(--border);
+        border-bottom: 1px solid var(--line-strong);
       }
       .facts {
         flex: 1;
@@ -359,8 +362,8 @@
         justify-content: center;
         gap: 3px;
         padding: 22px 12px;
-        border-right: 1px solid var(--border);
-        border-bottom: 1px solid var(--border);
+        border-right: 1px solid var(--line);
+        border-bottom: 1px solid var(--line);
         text-align: center;
       }
       .fact:nth-child(3n) {
@@ -382,7 +385,10 @@
       .hero-tabs {
         display: grid;
         grid-template-columns: repeat(4, 1fr);
-        border-top: 1px solid var(--border);
+        margin: 14px 16px 0;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        overflow: hidden;
       }
       .hero-tabs a {
         padding: 17px 10px;
@@ -390,7 +396,7 @@
         font-size: 0.92rem;
         color: var(--muted);
         text-decoration: none;
-        border-right: 1px solid var(--border);
+        border-right: 1px solid var(--line);
       }
       .hero-tabs a:last-child {
         border-right: none;
@@ -399,6 +405,7 @@
       .hero-tabs a.active {
         color: #fff;
         font-weight: 500;
+        background: rgba(255, 255, 255, 0.03);
       }
 
       /* ----------------------------- sections ---------------------------- */
@@ -434,9 +441,9 @@
         gap: 18px;
       }
       .card {
-        background: var(--panel);
-        border: 1px solid var(--border);
-        border-radius: var(--radius);
+        background: rgba(255, 255, 255, 0.025);
+        border: 1px solid var(--line);
+        border-radius: 16px;
         padding: 26px 24px;
       }
       .card .ico {
@@ -483,9 +490,9 @@
       }
 
       .compare-panel {
-        background: var(--panel);
-        border: 1px solid var(--border);
-        border-radius: var(--radius);
+        background: rgba(255, 255, 255, 0.025);
+        border: 1px solid var(--line);
+        border-radius: 16px;
         overflow: hidden;
       }
       table {
@@ -497,7 +504,7 @@
       td {
         padding: 14px 22px;
         text-align: left;
-        border-bottom: 1px solid var(--border);
+        border-bottom: 1px solid var(--line);
       }
       th {
         color: var(--muted);
@@ -523,9 +530,9 @@
       }
 
       .code-card {
-        background: #0d0e1e;
-        border: 1px solid var(--border);
-        border-radius: var(--radius);
+        background: rgba(0, 0, 0, 0.35);
+        border: 1px solid var(--line);
+        border-radius: 16px;
         overflow: hidden;
       }
       .code-head {
@@ -533,13 +540,13 @@
         justify-content: space-between;
         align-items: center;
         padding: 12px 20px;
-        border-bottom: 1px solid var(--border);
+        border-bottom: 1px solid var(--line);
         color: var(--muted);
         font-size: 0.82rem;
       }
       .code-head button {
         background: none;
-        border: 1px solid var(--border);
+        border: 1px solid var(--line);
         border-radius: 8px;
         color: var(--muted);
         cursor: pointer;
@@ -571,8 +578,8 @@
 
       footer {
         margin-top: 84px;
-        border-top: 1px solid var(--border);
-        padding: 34px 0 46px;
+        border-top: 1px solid var(--line);
+        padding: 34px 40px 46px;
         color: var(--muted);
         font-size: 0.86rem;
       }
@@ -592,15 +599,16 @@
       }
 
       @media (max-width: 920px) {
+        .inner {
+          padding: 0 18px;
+        }
         .hero-grid {
           grid-template-columns: 1fr;
         }
         .hero-left {
           padding: 44px 28px 40px;
-        }
-        .hero-right {
-          border-left: none;
-          border-top: 1px solid var(--border);
+          border-right: none;
+          border-bottom: 1px solid var(--line-strong);
         }
         .hero-tabs {
           grid-template-columns: 1fr 1fr;
@@ -609,7 +617,7 @@
           border-right: none;
         }
         .hero-tabs a:nth-child(-n + 2) {
-          border-bottom: 1px solid var(--border);
+          border-bottom: 1px solid var(--line);
         }
         .cards3,
         .try {
@@ -633,204 +641,201 @@
       <button class="close" id="banner-close" aria-label="Dismiss">✕</button>
     </div>
 
-    <header class="top">
-      <div class="wrap nav-in">
-        <a class="logo" href="#">
-          <svg width="26" height="26" viewBox="0 0 26 26" fill="none">
-            <rect x="1" y="1" width="24" height="24" rx="6.5" fill="#4945ff" />
-            <rect x="8" y="8" width="10" height="10" rx="2.5" fill="white" opacity="0.94" />
-          </svg>
-          tracear
-        </a>
-        <div class="nav-links">
-          <div class="nav-item">
-            <a href="#features">Engine <span class="chev">▼</span></a>
-            <div class="menu">
-              <a href="#features">Sub-pixel tracking<small>why it doesn't jitter</small></a>
-              <a href="#features">Self-calibrating pose<small>6DoF without setup</small></a>
-              <a href="#compare">Benchmarks<small>measured on real phones</small></a>
+    <div class="col">
+      <header class="top">
+        <div class="nav-in">
+          <a class="logo" href="#">
+            <svg width="26" height="26" viewBox="0 0 26 26" fill="none">
+              <rect x="1" y="1" width="24" height="24" rx="6.5" fill="#4945ff" />
+              <rect x="8" y="8" width="10" height="10" rx="2.5" fill="white" opacity="0.94" />
+            </svg>
+            tracear
+          </a>
+          <div class="nav-links">
+            <div class="nav-item">
+              <a href="#features">Engine <span class="chev">▼</span></a>
+              <div class="menu">
+                <a href="#features">Sub-pixel tracking<small>why it doesn't jitter</small></a>
+                <a href="#features">Self-calibrating pose<small>6DoF without setup</small></a>
+                <a href="#compare">Benchmarks<small>measured on real phones</small></a>
+              </div>
+            </div>
+            <div class="nav-item">
+              <a href="#try">Live demo</a>
+            </div>
+            <div class="nav-item">
+              <a href="#quickstart">Quickstart</a>
+            </div>
+            <div class="nav-item">
+              <a href="https://github.com/CagKebabi/TraceAR">Developers <span class="chev">▼</span></a>
+              <div class="menu">
+                <a href="https://github.com/CagKebabi/TraceAR">GitHub repository<small>Rust core + TypeScript SDK</small></a>
+                <a href="https://www.npmjs.com/package/@tracear/sdk">npm package<small>@tracear/sdk</small></a>
+                <a href="https://github.com/CagKebabi/TraceAR/releases">Releases<small>changelogs & notes</small></a>
+              </div>
             </div>
           </div>
-          <div class="nav-item">
-            <a href="#try">Live demo</a>
-          </div>
-          <div class="nav-item">
-            <a href="#quickstart">Quickstart</a>
-          </div>
-          <div class="nav-item">
-            <a href="https://github.com/CagKebabi/TraceAR">Developers <span class="chev">▼</span></a>
-            <div class="menu">
-              <a href="https://github.com/CagKebabi/TraceAR">GitHub repository<small>Rust core + TypeScript SDK</small></a>
-              <a href="https://www.npmjs.com/package/@tracear/sdk">npm package<small>@tracear/sdk</small></a>
-              <a href="https://github.com/CagKebabi/TraceAR/releases">Releases<small>changelogs & notes</small></a>
-            </div>
+          <div class="nav-right">
+            <a class="gh-chip" href="https://github.com/CagKebabi/TraceAR" title="Star on GitHub">
+              <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z" />
+              </svg>
+              <span id="gh-stars">Star</span>
+            </a>
+            <a class="btn btn-white" href="demo/">Live Demo</a>
+            <a class="btn btn-primary" href="https://www.npmjs.com/package/@tracear/sdk">Get Started</a>
           </div>
         </div>
-        <div class="nav-right">
-          <a class="gh-chip" href="https://github.com/CagKebabi/TraceAR" title="Star on GitHub">
-            <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor">
-              <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z" />
-            </svg>
-            <span id="gh-stars">Star</span>
-          </a>
-          <a class="btn btn-white" href="demo/">Live Demo</a>
-          <a class="btn btn-primary" href="https://www.npmjs.com/package/@tracear/sdk">Get Started</a>
+      </header>
+
+      <div class="hero-panel">
+        <div class="hero-grid">
+          <div class="hero-left">
+            <h1>
+              Open-Source Image Tracking for Jitter-Free Web AR on
+              <br />
+              <span class="typed-box"><span id="typed"></span><span class="caret"></span></span>
+            </h1>
+            <div class="install">
+              <span>npm i @tracear/sdk</span>
+              <button id="copy-install" title="Copy">⧉</button>
+            </div>
+            <p class="hero-alt">
+              or <a href="demo/">Try the Live Camera Demo</a> — nothing to install
+            </p>
+          </div>
+          <div class="hero-right">
+            <div class="cap">Point a phone at print, posters or packaging — these numbers are from a real device.</div>
+            <div class="facts">
+              <div class="fact"><b>1.90 px</b><span>median jitter<br />640 px frame</span></div>
+              <div class="fact"><b>2.5 ms</b><span>CV time per<br />tracked frame</span></div>
+              <div class="fact"><b>~95 KB</b><span>SDK gzipped<br />WASM included</span></div>
+              <div class="fact"><b>0.1 s</b><span>marker compile<br />512 px image</span></div>
+              <div class="fact"><b>6DoF</b><span>self-calibrating<br />pose</span></div>
+              <div class="fact"><b>MIT</b><span>free for<br />commercial use</span></div>
+            </div>
+          </div>
         </div>
       </div>
-    </header>
+      <div class="hero-tabs">
+        <a class="active" href="#features">Sub-pixel Tracking</a>
+        <a href="#features">Self-calibrating Pose</a>
+        <a href="#try">Live Demo</a>
+        <a href="#compare">Benchmarks</a>
+      </div>
 
-    <div class="hero-bg">
-      <div class="wrap">
-        <div class="hero-panel">
-          <div class="hero-grid">
-            <div class="hero-left">
-              <h1>
-                Open-Source Image Tracking for Jitter-Free Web AR on
-                <br />
-                <span class="typed-box"><span id="typed"></span><span class="caret"></span></span>
-              </h1>
-              <div class="install">
-                <span>npm i @tracear/sdk</span>
-                <button id="copy-install" title="Copy">⧉</button>
-              </div>
-              <p class="hero-alt">
-                or <a href="demo/">Try the Live Camera Demo</a> — nothing to install
+      <section id="features">
+        <div class="inner">
+          <div class="sec-head">
+            <div class="kicker">The engine</div>
+            <h2>Detection acquires. Tracking is what makes it smooth.</h2>
+            <p>
+              Most web trackers re-detect every frame and inherit its noise. TraceAR detects once,
+              then follows the target with sub-pixel image alignment — the difference you can see.
+            </p>
+          </div>
+          <div class="cards3">
+            <div class="card">
+              <div class="ico">◈</div>
+              <h3>Sub-pixel tracking</h3>
+              <p>
+                Inverse-compositional patch alignment against the compiled marker, coarse-to-fine
+                over a half-resolution level — fast handheld motion and motion blur survive.
               </p>
             </div>
-            <div class="hero-right">
-              <div class="cap">Point a phone at print, posters or packaging — these numbers are from a real device.</div>
-              <div class="facts">
-                <div class="fact"><b>1.90 px</b><span>median jitter<br />640 px frame</span></div>
-                <div class="fact"><b>2.5 ms</b><span>CV time per<br />tracked frame</span></div>
-                <div class="fact"><b>~95 KB</b><span>SDK gzipped<br />WASM included</span></div>
-                <div class="fact"><b>0.1 s</b><span>marker compile<br />512 px image</span></div>
-                <div class="fact"><b>6DoF</b><span>self-calibrating<br />pose</span></div>
-                <div class="fact"><b>MIT</b><span>free for<br />commercial use</span></div>
+            <div class="card">
+              <div class="ico">▣</div>
+              <h3>Self-calibrating pose</h3>
+              <p>
+                Homography decomposition with LM refinement and a rotation-ambiguity prior; camera
+                focal length is estimated online — no calibration step for your users.
+              </p>
+            </div>
+            <div class="card">
+              <div class="ico">≋</div>
+              <h3>Motion-adaptive rendering</h3>
+              <p>
+                One-Euro filtering on SE(3) blended with raw measurements by instantaneous speed:
+                a still scene renders frozen, a moving one stays glued with no swim.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="try">
+        <div class="inner">
+          <div class="sec-head">
+            <div class="kicker">Try it now</div>
+            <h2>Ninety seconds, no install</h2>
+            <p>Scan with your phone — compile a marker in the browser and watch a 3D anchor lock on.</p>
+          </div>
+          <div class="try">
+            <div class="card">
+              <div>
+                <h3>Live demo</h3>
+                <p>Generate or upload a marker image, point the camera, get a tracked 3D scene.</p>
+                <a class="btn btn-primary" href="demo/">Open demo</a>
               </div>
+              <img src="assets/qr-demo.png" alt="QR code for the live demo" />
+            </div>
+            <div class="card">
+              <div>
+                <h3>Side-by-side benchmark</h3>
+                <p>TraceAR and MindAR on the same camera and marker, with one identical jitter metric.</p>
+                <a class="btn btn-ghost" href="compare/">Open comparison</a>
+              </div>
+              <img src="assets/qr-compare.png" alt="QR code for the comparison app" />
             </div>
           </div>
-          <div class="hero-tabs">
-            <a class="active" href="#features">Sub-pixel Tracking</a>
-            <a href="#features">Self-calibrating Pose</a>
-            <a href="#try">Live Demo</a>
-            <a href="#compare">Benchmarks</a>
-          </div>
         </div>
-      </div>
-    </div>
+      </section>
 
-    <section id="features">
-      <div class="wrap">
-        <div class="sec-head">
-          <div class="kicker">The engine</div>
-          <h2>Detection acquires. Tracking is what makes it smooth.</h2>
-          <p>
-            Most web trackers re-detect every frame and inherit its noise. TraceAR detects once,
-            then follows the target with sub-pixel image alignment — the difference you can see.
+      <section id="compare">
+        <div class="inner">
+          <div class="sec-head">
+            <div class="kicker">Benchmarks</div>
+            <h2>Measured, not claimed</h2>
+            <p>
+              <a href="https://github.com/hiukim/mind-ar-js" style="color: var(--text)">MindAR</a> is the
+              pioneering open-source web image tracker; TraceAR makes different engineering trade-offs.
+              Same phone, same marker, identical metric — reproducible on your own device.
+            </p>
+          </div>
+          <div class="compare-panel">
+            <table>
+              <thead>
+                <tr><th></th><th>TraceAR</th><th>MindAR</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Median jitter (640 px frame)</td><td class="win">1.90 px</td><td>5.47 px</td></tr>
+                <tr><td>p90 jitter</td><td class="win">5.8 px</td><td>8.3 px</td></tr>
+                <tr><td>CV time per tracked frame</td><td class="win">~2.5 ms</td><td>n/a (not exposed)</td></tr>
+                <tr><td>Marker compile (512 px)</td><td class="win">0.1 s · 169 KB</td><td>1.4 s · 418 KB</td></tr>
+                <tr><td>SDK size (gzipped)</td><td class="win">~95 KB</td><td>~370 KB (tfjs runtime)</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="compare-note">
+            Methodology: second-difference RMS of the marker center, so deliberate camera motion cancels
+            out and only frame-to-frame shake counts. Run it yourself in the
+            <a href="compare/">comparison app</a>.
           </p>
         </div>
-        <div class="cards3">
-          <div class="card">
-            <div class="ico">◈</div>
-            <h3>Sub-pixel tracking</h3>
-            <p>
-              Inverse-compositional patch alignment against the compiled marker, coarse-to-fine
-              over a half-resolution level — fast handheld motion and motion blur survive.
-            </p>
-          </div>
-          <div class="card">
-            <div class="ico">▣</div>
-            <h3>Self-calibrating pose</h3>
-            <p>
-              Homography decomposition with LM refinement and a rotation-ambiguity prior; camera
-              focal length is estimated online — no calibration step for your users.
-            </p>
-          </div>
-          <div class="card">
-            <div class="ico">≋</div>
-            <h3>Motion-adaptive rendering</h3>
-            <p>
-              One-Euro filtering on SE(3) blended with raw measurements by instantaneous speed:
-              a still scene renders frozen, a moving one stays glued with no swim.
-            </p>
-          </div>
-        </div>
-      </div>
-    </section>
+      </section>
 
-    <section id="try">
-      <div class="wrap">
-        <div class="sec-head">
-          <div class="kicker">Try it now</div>
-          <h2>Ninety seconds, no install</h2>
-          <p>Scan with your phone — compile a marker in the browser and watch a 3D anchor lock on.</p>
-        </div>
-        <div class="try">
-          <div class="card">
-            <div>
-              <h3>Live demo</h3>
-              <p>Generate or upload a marker image, point the camera, get a tracked 3D scene.</p>
-              <a class="btn btn-primary" href="demo/">Open demo</a>
+      <section id="quickstart">
+        <div class="inner">
+          <div class="sec-head">
+            <div class="kicker">Quickstart</div>
+            <h2>Tracking in twenty lines</h2>
+          </div>
+          <div class="code-card">
+            <div class="code-head">
+              <span>main.ts</span>
+              <button id="copy-code">Copy</button>
             </div>
-            <img src="assets/qr-demo.png" alt="QR code for the live demo" />
-          </div>
-          <div class="card">
-            <div>
-              <h3>Side-by-side benchmark</h3>
-              <p>TraceAR and MindAR on the same camera and marker, with one identical jitter metric.</p>
-              <a class="btn btn-ghost" href="compare/">Open comparison</a>
-            </div>
-            <img src="assets/qr-compare.png" alt="QR code for the comparison app" />
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section id="compare">
-      <div class="wrap">
-        <div class="sec-head">
-          <div class="kicker">Benchmarks</div>
-          <h2>Measured, not claimed</h2>
-          <p>
-            <a href="https://github.com/hiukim/mind-ar-js" style="color: var(--text)">MindAR</a> is the
-            pioneering open-source web image tracker; TraceAR makes different engineering trade-offs.
-            Same phone, same marker, identical metric — reproducible on your own device.
-          </p>
-        </div>
-        <div class="compare-panel">
-          <table>
-            <thead>
-              <tr><th></th><th>TraceAR</th><th>MindAR</th></tr>
-            </thead>
-            <tbody>
-              <tr><td>Median jitter (640 px frame)</td><td class="win">1.90 px</td><td>5.47 px</td></tr>
-              <tr><td>p90 jitter</td><td class="win">5.8 px</td><td>8.3 px</td></tr>
-              <tr><td>CV time per tracked frame</td><td class="win">~2.5 ms</td><td>n/a (not exposed)</td></tr>
-              <tr><td>Marker compile (512 px)</td><td class="win">0.1 s · 169 KB</td><td>1.4 s · 418 KB</td></tr>
-              <tr><td>SDK size (gzipped)</td><td class="win">~95 KB</td><td>~370 KB (tfjs runtime)</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <p class="compare-note">
-          Methodology: second-difference RMS of the marker center, so deliberate camera motion cancels
-          out and only frame-to-frame shake counts. Run it yourself in the
-          <a href="compare/">comparison app</a>.
-        </p>
-      </div>
-    </section>
-
-    <section id="quickstart">
-      <div class="wrap">
-        <div class="sec-head">
-          <div class="kicker">Quickstart</div>
-          <h2>Tracking in twenty lines</h2>
-        </div>
-        <div class="code-card">
-          <div class="code-head">
-            <span>main.ts</span>
-            <button id="copy-code">Copy</button>
-          </div>
-          <pre id="code-block"><span class="tk-kw">import</span> { Tracear } <span class="tk-kw">from</span> <span class="tk-str">"@tracear/sdk"</span>;
+            <pre id="code-block"><span class="tk-kw">import</span> { Tracear } <span class="tk-kw">from</span> <span class="tk-str">"@tracear/sdk"</span>;
 <span class="tk-kw">import</span> { TracearThree } <span class="tk-kw">from</span> <span class="tk-str">"@tracear/sdk/three"</span>;
 
 <span class="tk-kw">const</span> tracker = <span class="tk-kw">await</span> Tracear.<span class="tk-fn">create</span>({
@@ -846,20 +851,21 @@ renderer.<span class="tk-fn">setAnimationLoop</span>(() =&gt; {
   t3.<span class="tk-fn">update</span>();
   renderer.<span class="tk-fn">render</span>(scene, t3.camera);
 });</pre>
+          </div>
         </div>
-      </div>
-    </section>
+      </section>
 
-    <footer>
-      <div class="wrap foot-in">
-        <span>TraceAR — MIT licensed. Tracking runs entirely on-device; camera frames never leave the browser.</span>
-        <span>
-          <a href="https://github.com/CagKebabi/TraceAR">GitHub</a>
-          <a href="https://www.npmjs.com/package/@tracear/sdk">npm</a>
-          <a href="https://github.com/CagKebabi/TraceAR/releases">Releases</a>
-        </span>
-      </div>
-    </footer>
+      <footer>
+        <div class="foot-in">
+          <span>TraceAR — MIT licensed. Tracking runs entirely on-device; camera frames never leave the browser.</span>
+          <span>
+            <a href="https://github.com/CagKebabi/TraceAR">GitHub</a>
+            <a href="https://www.npmjs.com/package/@tracear/sdk">npm</a>
+            <a href="https://github.com/CagKebabi/TraceAR/releases">Releases</a>
+          </span>
+        </div>
+      </footer>
+    </div>
 
     <script>
       /* announcement banner dismissal */
