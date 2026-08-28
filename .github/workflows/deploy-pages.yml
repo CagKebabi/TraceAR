@@ -39,7 +39,12 @@ jobs:
         run: wasm-pack build core/tracear-wasm --release --target web --no-pack --out-dir ../../packages/tracear/src/wasm
 
       - name: npm install
-        run: npm install
+        # npm 11 writes only the lockfile author's platform binaries into the
+        # lock (rollup/esbuild optional deps), so a Windows-generated lock
+        # breaks Linux installs (npm/cli#4828) — resolve fresh on the runner.
+        run: |
+          rm -f package-lock.json
+          npm install
 
       - name: Build SDK
         run: npm run build:sdk
