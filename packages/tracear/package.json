@@ -9,7 +9,7 @@
     "type": "git",
     "url": "git+https://github.com/CagKebabi/TraceAR.git"
   },
-  "homepage": "https://github.com/CagKebabi/TraceAR#readme",
+  "homepage": "https://cagkebabi.github.io/TraceAR/",
   "bugs": "https://github.com/CagKebabi/TraceAR/issues",
   "keywords": ["ar", "webar", "image-tracking", "augmented-reality", "wasm", "computer-vision", "three", "mindar-alternative"],
   "sideEffects": false,

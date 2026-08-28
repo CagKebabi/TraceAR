@@ -1,0 +1,70 @@
+name: Tracking quality report
+description: Jitter, drift, swim, slow detection, or lost tracking on a real device.
+labels: ["tracking-quality"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Reports from real devices are the most valuable feedback this project
+        gets — thank you. Numbers beat adjectives: the demo shows a stats
+        readout, and the [comparison app](https://cagkebabi.github.io/TraceAR/compare/)
+        measures jitter with a motion-immune metric.
+  - type: dropdown
+    id: symptom
+    attributes:
+      label: Symptom
+      options:
+        - Jitter — content shakes while the phone is still
+        - Swim / drift — content slides off the marker during camera motion
+        - Slow re-anchor — content lags behind after fast motion
+        - Detection fails — marker is never (or rarely) found
+        - Tracking lost too easily
+        - Low frame rate / high CV time
+        - Other (describe below)
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe it
+      description: What you see, how often, and how you trigger it.
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Device and OS
+      placeholder: Pixel 8, Android 15 / iPhone 14, iOS 18.2
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and version
+      placeholder: Chrome 139 / Safari 18.2
+    validations:
+      required: true
+  - type: input
+    id: numbers
+    attributes:
+      label: Measured numbers (if you have them)
+      placeholder: "median jitter 1.9 px, p90 5.8 px, CV 2.5 ms, ~30 pose updates/s"
+  - type: dropdown
+    id: marker
+    attributes:
+      label: Marker
+      options:
+        - Generated sample marker
+        - My own image (please attach it below if you can)
+    validations:
+      required: true
+  - type: textarea
+    id: conditions
+    attributes:
+      label: Conditions
+      description: Lighting, distance to the marker, printed vs on-screen marker, marker size.
+  - type: textarea
+    id: media
+    attributes:
+      label: Screen recording or photos
+      description: A short recording of the problem helps enormously. Drag and drop to attach.

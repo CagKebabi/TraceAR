@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Questions and ideas
+    url: https://github.com/CagKebabi/TraceAR/discussions
+    about: Not sure it's a bug? Ask in Discussions — usage help, integration questions, and brainstorming live there.

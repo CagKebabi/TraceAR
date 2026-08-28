@@ -1,0 +1,61 @@
+name: Bug report
+description: Something is broken — an error, a crash, or wrong behavior.
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you do, and what went wrong?
+      placeholder: Calling tracker.start() throws … / the camera view stays black on …
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: dropdown
+    id: context
+    attributes:
+      label: Where does it happen?
+      options:
+        - My own app using @tracear/sdk
+        - Live demo (cagkebabi.github.io/TraceAR/demo)
+        - Comparison app
+        - Marker compiler (npx tracear compile / browser compiler)
+    validations:
+      required: true
+  - type: input
+    id: sdk-version
+    attributes:
+      label: SDK version
+      placeholder: "@tracear/sdk 0.1.2"
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Device and OS
+      placeholder: Pixel 8, Android 15 / iPhone 14, iOS 18.2 / desktop, Windows 11
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and version
+      placeholder: Chrome 139 / Safari 18.2
+    validations:
+      required: true
+  - type: textarea
+    id: console
+    attributes:
+      label: Console output
+      description: Any errors or warnings from the browser console.
+      render: text
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: Bundler and version (Vite/webpack/…), marker image, reproduction repo — anything that helps.

@@ -1,0 +1,67 @@
+name: Release
+
+# Publishes @tracear/sdk to npm with provenance when a GitHub release is
+# published (tag format: vX.Y.Z). Requires the NPM_TOKEN repository secret —
+# a granular npm automation token with read/write on @tracear/sdk.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # npm provenance
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Tag must match package version
+        if: github.event_name == 'release'
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG=$(node -p "require('./packages/tracear/package.json').version")
+          if [ "$TAG" != "$PKG" ]; then
+            echo "Release tag v$TAG does not match package version $PKG" >&2
+            exit 1
+          fi
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core
+
+      - name: Core tests
+        working-directory: core
+        run: cargo test --release
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Build WASM
+        run: wasm-pack build core/tracear-wasm --release --target web --no-pack --out-dir ../../packages/tracear/src/wasm
+
+      - name: npm install
+        # Fresh resolve on the runner (npm/cli#4828) — same as ci.yml.
+        run: |
+          rm -f package-lock.json
+          npm install
+
+      - name: SDK dist build (type-check + size budget)
+        run: npm run build:sdk
+
+      - name: Publish to npm
+        run: npm publish --workspace @tracear/sdk --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
