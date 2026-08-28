@@ -4,7 +4,7 @@
 
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family: "Poppins", system-ui, -apple-system, sans-serif;
   background: #0f1115;
   color: #e6e8ec;
 }
@@ -50,7 +50,7 @@ h1 {
 }
 
 button {
-  background: #2a6df4;
+  background: #4945ff;
   border: none;
   color: white;
   border-radius: 8px;
