@@ -1,6 +1,6 @@
 {
   "name": "@tracear/sdk",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "High-performance, jitter-free image tracking for the mobile web — a WASM+SIMD AR engine",
   "type": "module",
   "license": "MIT",

@@ -1,6 +1,12 @@
 //! Runtime detection: find a compiled marker in a camera frame and return the
 //! marker->frame homography.
+//!
+//! Frame-side work (pyramid + FAST + BRIEF) does not depend on the marker, so
+//! it is factored into [`FrameFeatures`]: extract once per frame, then match
+//! any number of markers against it. With multi-target sessions this is the
+//! difference between O(markers) and O(1) feature extractions per frame.
 
+use crate::brief::Descriptor;
 use crate::features::extract_features;
 use crate::homography::{self, quad_sane};
 use crate::image::{build_pyramid, GrayImage};
@@ -55,23 +61,39 @@ pub struct Detection {
     pub matches: usize,
 }
 
-pub fn detect_marker(marker: &CompiledMarker, frame: &GrayImage, cfg: &DetectorConfig) -> Option<Detection> {
+/// Marker-independent per-frame detection data: keypoints and descriptors from
+/// every pyramid level, positions already converted to frame level-0 px.
+pub struct FrameFeatures {
+    pub positions: Vec<(f64, f64)>,
+    pub descriptors: Vec<Descriptor>,
+}
+
+pub fn extract_frame_features(frame: &GrayImage, cfg: &DetectorConfig) -> FrameFeatures {
     let pyr = build_pyramid(frame, cfg.pyramid_min_side, cfg.pyramid_max_levels);
-    let mut fpos: Vec<(f64, f64)> = Vec::new();
-    let mut fdesc = Vec::new();
+    let mut positions: Vec<(f64, f64)> = Vec::new();
+    let mut descriptors = Vec::new();
     for (li, level) in pyr.levels.iter().enumerate() {
         let s = (1usize << li) as f64;
         let (pos, desc) = extract_features(level, cfg.fast_threshold, cfg.max_features_per_level);
         for (i, &(x, y)) in pos.iter().enumerate() {
-            fpos.push((x as f64 * s, y as f64 * s));
-            fdesc.push(desc[i]);
+            positions.push((x as f64 * s, y as f64 * s));
+            descriptors.push(desc[i]);
         }
     }
-    if fdesc.len() < cfg.min_inliers {
+    FrameFeatures { positions, descriptors }
+}
+
+/// Match one marker against pre-extracted frame features.
+pub fn detect_marker_in(
+    marker: &CompiledMarker,
+    feats: &FrameFeatures,
+    cfg: &DetectorConfig,
+) -> Option<Detection> {
+    if feats.descriptors.len() < cfg.min_inliers {
         return None;
     }
     let matches = matcher::match_descriptors(
-        &fdesc,
+        &feats.descriptors,
         &marker.descriptors,
         &marker.positions,
         cfg.match_max_dist,
@@ -88,7 +110,7 @@ pub fn detect_marker(marker: &CompiledMarker, frame: &GrayImage, cfg: &DetectorC
             (p.0 as f64, p.1 as f64)
         })
         .collect();
-    let dst: Vec<(f64, f64)> = matches.iter().map(|m| fpos[m.query as usize]).collect();
+    let dst: Vec<(f64, f64)> = matches.iter().map(|m| feats.positions[m.query as usize]).collect();
     let res = homography::ransac(&src, &dst, cfg.ransac_thresh_px, cfg.ransac_iters, cfg.seed)?;
     let inliers = res.inliers.len();
     if inliers < cfg.min_inliers {
@@ -101,4 +123,9 @@ pub fn detect_marker(marker: &CompiledMarker, frame: &GrayImage, cfg: &DetectorC
         return None;
     }
     Some(Detection { homography: res.h, inliers, matches: matches.len() })
+}
+
+/// One-shot convenience: extract features and match a single marker.
+pub fn detect_marker(marker: &CompiledMarker, frame: &GrayImage, cfg: &DetectorConfig) -> Option<Detection> {
+    detect_marker_in(marker, &extract_frame_features(frame, cfg), cfg)
 }

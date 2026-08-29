@@ -52,18 +52,21 @@ Turn your target image (poster, packaging, card…) into a `.tracear` file —
 once, offline:
 
 ```sh
-npx tracear compile poster.png        # -> poster.tracear
+npx tracear compile poster.png                       # -> poster.tracear
+npx tracear compile a.png b.png -o album.tracear     # multi-marker pack
 ```
 
 or in the browser:
 
 ```ts
-import { compileImage } from "@tracear/sdk/compiler";
+import { compileImage, packMarkers } from "@tracear/sdk/compiler";
 const { data } = await compileImage(imageFileOrCanvas); // Uint8Array (.tracear)
 ```
 
 Good markers are textured and asymmetric; avoid large flat areas and
-repeating patterns.
+repeating patterns. Multi-target sessions are cheap (0.2.0+): frame features
+are shared across all markers and idle-target detection is amortized, so ten
+loaded targets cost roughly the same per frame as one.
 
 ## 2 · Track
 

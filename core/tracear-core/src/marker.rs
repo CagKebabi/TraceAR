@@ -260,6 +260,72 @@ impl CompiledMarker {
     }
 }
 
+/// Multi-marker pack container ("album" file), format v1 (little-endian):
+/// magic "TRPK" | version u32 | marker count u32 | per marker: byte length u32 |
+/// then the markers' complete single-marker `.tracear` blobs back to back.
+///
+/// Deliberately a dumb container: each entry is an unmodified single-marker
+/// file, so packing is byte concatenation — no recompilation. Adding or
+/// removing one target never touches the others' compiled data.
+pub const PACK_MAGIC: [u8; 4] = *b"TRPK";
+pub const PACK_VERSION: u32 = 1;
+
+/// Bundle single-marker `.tracear` blobs into one pack file.
+pub fn pack_markers<T: AsRef<[u8]>>(blobs: &[T]) -> Vec<u8> {
+    let total: usize = blobs.iter().map(|b| b.as_ref().len()).sum();
+    let mut out = Vec::with_capacity(12 + blobs.len() * 4 + total);
+    out.extend_from_slice(&PACK_MAGIC);
+    out.extend_from_slice(&PACK_VERSION.to_le_bytes());
+    out.extend_from_slice(&(blobs.len() as u32).to_le_bytes());
+    for b in blobs {
+        out.extend_from_slice(&(b.as_ref().len() as u32).to_le_bytes());
+    }
+    for b in blobs {
+        out.extend_from_slice(b.as_ref());
+    }
+    out
+}
+
+/// Load a `.tracear` file that may be either a single marker or a pack.
+/// Returns the contained markers in file order.
+pub fn load_all(bytes: &[u8]) -> Result<Vec<CompiledMarker>, String> {
+    if bytes.len() >= 4 && bytes[..4] == MAGIC {
+        return Ok(vec![CompiledMarker::from_bytes(bytes)?]);
+    }
+    if bytes.len() < 12 || bytes[..4] != PACK_MAGIC {
+        return Err("not a .tracear file (bad magic)".into());
+    }
+    let version = u32::from_le_bytes(bytes[4..8].try_into().unwrap());
+    if version != PACK_VERSION {
+        return Err(format!(
+            "unsupported .tracear pack version {version} (expected {PACK_VERSION}) — repack the targets"
+        ));
+    }
+    let count = u32::from_le_bytes(bytes[8..12].try_into().unwrap()) as usize;
+    let table_end = 12 + count * 4;
+    if bytes.len() < table_end {
+        return Err("pack data truncated (length table)".into());
+    }
+    let mut lengths = Vec::with_capacity(count);
+    for i in 0..count {
+        let off = 12 + i * 4;
+        lengths.push(u32::from_le_bytes(bytes[off..off + 4].try_into().unwrap()) as usize);
+    }
+    let body_len: usize = lengths.iter().sum();
+    if bytes.len() != table_end + body_len {
+        return Err("pack data truncated or has trailing bytes".into());
+    }
+    let mut markers = Vec::with_capacity(count);
+    let mut pos = table_end;
+    for (i, len) in lengths.into_iter().enumerate() {
+        let m = CompiledMarker::from_bytes(&bytes[pos..pos + len])
+            .map_err(|e| format!("pack entry {i}: {e}"))?;
+        markers.push(m);
+        pos += len;
+    }
+    Ok(markers)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -285,6 +351,41 @@ mod tests {
         assert!(CompiledMarker::from_bytes(&bytes[..bytes.len() - 1]).is_err()); // truncated body
         bytes[0] = b'X';
         assert!(CompiledMarker::from_bytes(&bytes).is_err()); // bad magic
+    }
+
+    #[test]
+    fn pack_roundtrip() {
+        let a = compile_marker(&synthetic::textured_image(128, 128, 3), &CompileConfig::default());
+        let b = compile_marker(&synthetic::textured_image(128, 96, 8), &CompileConfig::default());
+        let pack = pack_markers(&[a.to_bytes(), b.to_bytes()]);
+        let loaded = load_all(&pack).unwrap();
+        assert_eq!(loaded.len(), 2);
+        assert_eq!((loaded[0].width, loaded[0].height), (128, 128));
+        assert_eq!((loaded[1].width, loaded[1].height), (128, 96));
+        assert_eq!(loaded[0].descriptors, a.descriptors);
+        assert_eq!(loaded[1].tracking_levels, b.tracking_levels);
+    }
+
+    #[test]
+    fn load_all_accepts_single_marker_file() {
+        let m = compile_marker(&synthetic::textured_image(128, 128, 3), &CompileConfig::default());
+        let loaded = load_all(&m.to_bytes()).unwrap();
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].positions, m.positions);
+    }
+
+    #[test]
+    fn pack_rejects_corrupt_data() {
+        let m = compile_marker(&synthetic::textured_image(128, 128, 3), &CompileConfig::default());
+        let pack = pack_markers(&[m.to_bytes()]);
+        assert!(load_all(&pack[..8]).is_err()); // truncated header
+        assert!(load_all(&pack[..pack.len() - 1]).is_err()); // truncated body
+        let mut bad = pack.clone();
+        bad[0] = b'X';
+        assert!(load_all(&bad).is_err()); // bad magic
+        let mut extra = pack.clone();
+        extra.push(0);
+        assert!(load_all(&extra).is_err()); // trailing bytes
     }
 
     #[test]

@@ -17,6 +17,35 @@ export interface CompileResult {
 }
 
 /**
+ * Bundle single-marker `.tracear` blobs into one multi-marker pack file.
+ * Pure byte concatenation — nothing is recompiled, so adding or removing a
+ * target never touches the others. The pack can be passed anywhere a
+ * `.tracear` target is accepted; its markers expand in order.
+ *
+ * Pack format v1 (little-endian): magic "TRPK" | version u32 | count u32 |
+ * per-marker byte length u32 | the marker blobs back to back.
+ */
+export function packMarkers(markers: (Uint8Array | ArrayBuffer)[]): Uint8Array {
+  const blobs = markers.map((m) => (m instanceof Uint8Array ? m : new Uint8Array(m)));
+  const total = blobs.reduce((n, b) => n + b.length, 0);
+  const out = new Uint8Array(12 + blobs.length * 4 + total);
+  const view = new DataView(out.buffer);
+  out.set([0x54, 0x52, 0x50, 0x4b], 0); // "TRPK"
+  view.setUint32(4, 1, true);
+  view.setUint32(8, blobs.length, true);
+  let pos = 12;
+  for (const b of blobs) {
+    view.setUint32(pos, b.length, true);
+    pos += 4;
+  }
+  for (const b of blobs) {
+    out.set(b, pos);
+    pos += b.length;
+  }
+  return out;
+}
+
+/**
  * Compile an image into a `.tracear` marker. The image is scaled down so its
  * long side is at most `maxSize` px (512 default — plenty for detection and
  * keeps marker files small).

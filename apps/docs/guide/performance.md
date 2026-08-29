@@ -45,9 +45,21 @@ the identical metric for both engines.
   [Markers](/guide/markers).
 - Keep your render loop light: the tracker leaves most of the main thread
   free, so if the scene stutters, profile your three.js scene first.
-- Multiple targets are processed in the same worker pass; each additional
-  *visible* target adds tracking cost, invisible ones only add periodic
-  detection attempts.
+
+## Many targets {#many-targets}
+
+Since 0.2.0, per-frame cost is flat in the number of loaded targets. Frame
+features are extracted once and shared by every marker's detection, and lost
+targets are scheduled under a per-frame budget: a *recently lost* target
+keeps same-frame priority (so re-acquiring the photo the user is pointing at
+feels instant), while long-idle targets take amortized round-robin turns —
+their only cost is a slightly longer time-to-first-acquire (a few hundred
+milliseconds with 10 targets).
+
+Measured natively with 10 targets loaded and 1 visible (640×480): ~272 ms per
+frame with naive per-marker detection versus **~13 ms average** with the
+scheduler. Each additional *visible* target still adds its own (cheap)
+tracking cost.
 
 ## Browser support
 

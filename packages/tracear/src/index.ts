@@ -20,10 +20,12 @@ const RESULT_STRIDE = 37;
 export interface TracearConfig {
   /** Element the managed <video> is appended to; position it yourself (e.g. relative). */
   container: HTMLElement;
-  /** Compiled `.tracear` targets: URLs or raw bytes. */
+  /** Compiled `.tracear` targets: URLs or raw bytes. A target file may hold
+   * a single marker or a multi-marker pack (see `packMarkers`); packs expand
+   * in place, so marker indices follow the expanded order. */
   targets: (string | ArrayBuffer | Uint8Array)[];
-  /** Physical width of each target in meters (or any unit — poses come out
-   * in the same unit). Defaults to 1 per target. */
+  /** Physical width of each marker in meters (or any unit — poses come out
+   * in the same unit), in expanded marker order. Defaults to 1 per marker. */
   targetWidthsMeters?: number[];
   /** Long-side cap for the processed frame, default 640. */
   maxProcessSize?: number;
@@ -187,7 +189,9 @@ export class Tracear {
       };
       worker.onerror = (e) => reject(new Error(`tracear: worker failed to load: ${e.message}`));
     });
-    const widths = config.targets.map((_, i) => config.targetWidthsMeters?.[i] ?? 1.0);
+    // Widths align with EXPANDED marker order (packs may hold several
+    // markers); the worker consumes them as targets expand, padding with 1.0.
+    const widths = config.targetWidthsMeters ?? [];
     worker.postMessage({ type: "init", markers, widths }, markers);
     const readyMsg = await ready;
     return new Tracear(config, worker, readyMsg.markerSizes);

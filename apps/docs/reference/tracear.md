@@ -21,8 +21,8 @@ the camera yet.
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `container` | `HTMLElement` | — | Element the managed `<video>` is appended to. Position it yourself (e.g. `position: relative`). |
-| `targets` | `(string \| ArrayBuffer \| Uint8Array)[]` | — | Compiled `.tracear` targets: URLs or raw bytes. |
-| `targetWidthsMeters` | `number[]` | `1` per target | Physical width of each target — poses come out in the same unit. |
+| `targets` | `(string \| ArrayBuffer \| Uint8Array)[]` | — | Compiled `.tracear` targets: URLs or raw bytes. A file may hold one marker or a [multi-marker pack](/guide/markers#many-targets-one-file-packs); packs expand in place. |
+| `targetWidthsMeters` | `number[]` | `1` per marker | Physical width of each marker (in expanded pack order) — poses come out in the same unit. |
 | `maxProcessSize` | `number` | `640` | Long-side cap for the processed frame. |
 | `lostAfterMisses` | `number` | `8` | Consecutive misses before `targetLost`. |
 | `videoConstraints` | `MediaTrackConstraints` | — | Extra `getUserMedia` video constraints, merged over the defaults (environment camera, 1280×720 ideal). |

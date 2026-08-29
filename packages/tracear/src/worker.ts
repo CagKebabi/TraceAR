@@ -139,10 +139,19 @@ self.onmessage = async (ev: MessageEvent<InitMessage | FrameMessage>) => {
       await init();
       engine = new Engine();
       const markerSizes: [number, number][] = [];
+      // A target file may hold one marker or a multi-marker pack; widths are
+      // consumed in expanded-marker order across all targets.
+      let widthCursor = 0;
       for (let i = 0; i < msg.markers.length; i++) {
-        const idx = engine.add_marker(new Uint8Array(msg.markers[i]), msg.widths[i] ?? 1.0);
-        const size = engine.marker_size(idx);
-        markerSizes.push([size[0], size[1]]);
+        const widths = new Float64Array(
+          msg.widths.slice(widthCursor).map((w) => w ?? 1.0),
+        );
+        const indices = engine.add_markers(new Uint8Array(msg.markers[i]), widths);
+        widthCursor += indices.length;
+        for (const idx of indices) {
+          const size = engine.marker_size(idx);
+          markerSizes.push([size[0], size[1]]);
+        }
       }
       post({ type: "ready", markerSizes });
     } else if (msg.type === "frame") {

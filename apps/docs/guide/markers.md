@@ -48,6 +48,33 @@ const { data, featureCount } = await compileImage(file); // File | Blob | img | 
 const tracker = await Tracear.create({ container, targets: [data] });
 ```
 
+## Many targets, one file (packs)
+
+A `.tracear` file can hold any number of markers. A *pack* is a pure
+container: each entry is an unmodified single-marker file, so bundling is
+byte concatenation — nothing gets recompiled when you add or remove one.
+
+```sh
+npx tracear compile a.png b.png c.png -o album.tracear   # compile + bundle
+npx tracear pack a.tracear b.tracear -o album.tracear    # bundle existing files
+```
+
+In the browser, bundle compiled markers with `packMarkers` (see the
+[compiler reference](/reference/compiler#packmarkers)).
+
+Use a pack anywhere a target is accepted — it expands in place:
+
+```ts
+await Tracear.create({ container, targets: ["/album.tracear"] });
+// markers get indices 0..N-1 in file order
+```
+
+Per-file targets and packs behave identically at runtime; choose whichever
+fits your asset pipeline. Sessions with many targets stay cheap: frame
+features are shared across all markers and idle-target detection is
+amortized, so 10 targets cost roughly the same per frame as one — see
+[Performance](/guide/performance#many-targets).
+
 ## Physical size
 
 Poses come out in the unit you declare for the marker's width:

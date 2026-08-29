@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-08-29
+
+Multi-target release: a session with many markers (an album of photos, a deck
+of cards) now costs roughly the same per frame as a session with one.
+
+### Added
+
+- **Multi-marker pack files.** One `.tracear` file can now hold any number of
+  markers. Packs are a pure container: each entry is an unmodified
+  single-marker file, so bundling is byte concatenation — adding or removing
+  one target never recompiles the others. Anywhere a target is accepted, a
+  pack expands in place (marker indices follow the expanded order).
+  - CLI: `npx tracear compile a.png b.png c.png -o album.tracear`, and
+    `npx tracear pack a.tracear b.tracear -o album.tracear`.
+  - Browser: `packMarkers(markers)` in `@tracear/sdk/compiler`.
+- `Pipeline::last_detect_indices` diagnostic (which markers attempted
+  detection last frame).
+
+### Changed
+
+- **Detection cost is now flat in the number of targets.** Frame features
+  (pyramid + FAST + BRIEF) are extracted once per frame and shared by every
+  marker's detection, and lost markers are scheduled under a per-frame
+  budget: recently-lost targets keep same-frame priority (re-acquire feel is
+  unchanged), while long-idle targets take amortized round-robin turns.
+  Measured with 10 targets and 1 visible (native, 640×480): 272 → 13 ms per
+  frame average. Sessions with 1–2 targets behave exactly as before.
+- `targetWidthsMeters` now aligns with expanded marker order (identical to
+  before unless you use packs).
+- `detectImage` with many targets also shares one feature extraction.
+
 ## [0.1.2] — 2026-08-27
 
 ### Added
@@ -59,7 +90,8 @@ Initial release.
   format, and an `npx tracear compile` CLI.
 - ~95 KB gzipped including the WASM binary.
 
-[Unreleased]: https://github.com/CagKebabi/TraceAR/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/CagKebabi/TraceAR/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/CagKebabi/TraceAR/releases/tag/v0.2.0
 [0.1.2]: https://github.com/CagKebabi/TraceAR/releases/tag/v0.1.2
 [0.1.1]: https://github.com/CagKebabi/TraceAR/releases/tag/v0.1.1
 [0.1.0]: https://github.com/CagKebabi/TraceAR/commits/main

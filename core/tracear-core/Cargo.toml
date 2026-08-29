@@ -1,6 +1,6 @@
 [package]
 name = "tracear-core"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 license = "MIT"
 description = "Portable computer-vision core for the Tracear web image tracking engine"

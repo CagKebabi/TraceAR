@@ -335,7 +335,7 @@ impl FocalEstimator {
         let u1 = a1 - cx * w1;
         let v1 = b1 - cy * w1;
         let mut pushed = 0usize;
-        let mut push = |samples: &mut Vec<f64>, pos: &mut usize, f2: f64| {
+        let push = |samples: &mut Vec<f64>, pos: &mut usize, f2: f64| {
             if f2.is_finite() && f2 > 0.0 {
                 let ratio = f2.sqrt() / long_side;
                 if (0.4..=2.5).contains(&ratio) {

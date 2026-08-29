@@ -118,6 +118,20 @@ impl Engine {
         Ok(self.session.add_marker(m, physical_width) as u32)
     }
 
+    /// Add every marker contained in a `.tracear` file — a single-marker file
+    /// or a multi-marker pack. `physical_widths` supplies widths for the
+    /// contained markers in order; missing entries default to 1.0. Returns
+    /// the assigned marker indices.
+    pub fn add_markers(&mut self, bytes: &[u8], physical_widths: &[f64]) -> Result<Vec<u32>, JsValue> {
+        let markers = tracear_core::marker::load_all(bytes).map_err(|e| JsValue::from_str(&e))?;
+        let mut indices = Vec::with_capacity(markers.len());
+        for (i, m) in markers.into_iter().enumerate() {
+            let w = physical_widths.get(i).copied().unwrap_or(1.0);
+            indices.push(self.session.add_marker(m, w) as u32);
+        }
+        Ok(indices)
+    }
+
     pub fn marker_count(&self) -> u32 {
         self.session.marker_count() as u32
     }
