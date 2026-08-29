@@ -45,18 +45,26 @@ pub struct DetectSchedule {
     /// A marker lost fewer than this many frames ago keeps priority: it is
     /// attempted every frame (within budget) instead of waiting its turn.
     pub priority_frames: u32,
-    /// Long-lost ("cold") markers are only scanned every N-th frame — the
-    /// frame-feature extraction dominates detection cost, so amortizing the
-    /// cold scan keeps idle multi-target sessions cheap. Whenever the number
-    /// of lost markers fits the per-frame budget there is nothing to
-    /// amortize and every frame scans (a 1–2 target session behaves exactly
-    /// like pre-0.2).
+    /// While at least one marker is being tracked, cold (long-lost) markers
+    /// are only scanned every N-th frame. Tracked frames are ~3 ms and scan
+    /// frames ~25 ms; interleaving them at a short interval makes the
+    /// measurement cadence visibly uneven during camera motion, so back off
+    /// hard — a re-appearing target is covered by the priority window, and a
+    /// *new* target being discovered a fraction of a second later is
+    /// imperceptible next to trembling content. While NOTHING is tracked
+    /// (the acquire phase) every frame scans.
     pub cold_scan_interval: u64,
+    /// Maximum number of simultaneously tracked markers; 0 = unlimited.
+    /// With `1` the engine behaves like an exclusive single-target session
+    /// (MindAR's maxTrack:1): once a target is acquired, no other detection
+    /// runs at all until it is lost — the cheapest and steadiest mode, and
+    /// the right one for "one photo plays at a time" products.
+    pub max_tracked: usize,
 }
 
 impl Default for DetectSchedule {
     fn default() -> Self {
-        Self { max_per_frame: 2, priority_frames: 30, cold_scan_interval: 3 }
+        Self { max_per_frame: 2, priority_frames: 30, cold_scan_interval: 10, max_tracked: 0 }
     }
 }
 
@@ -213,13 +221,17 @@ impl Pipeline {
         // Pass 2: pick which lost markers get a detection attempt this frame.
         // Priority: recently lost (same-frame recovery keeps a briefly-occluded
         // target from visibly dropping), then round-robin over the cold ones.
-        // Cold markers only scan on cadence frames — unless the lost set fits
-        // the budget outright, in which case there is nothing to amortize.
-        let lost_count = out.iter().filter(|r| r.is_none()).count();
+        // While something is tracked, cold scans run only on cadence frames so
+        // the worker's per-frame cost — and thus the measurement cadence —
+        // stays even; while nothing is tracked, every frame scans (acquire
+        // phase). A full tracked-slot set (max_tracked) suppresses detection
+        // entirely.
+        let tracked_count = out.iter().filter(|r| r.is_some()).count();
+        let slots_full = self.schedule.max_tracked > 0 && tracked_count >= self.schedule.max_tracked;
         let interval = self.schedule.cold_scan_interval.max(1);
-        let cold_scan = lost_count <= self.schedule.max_per_frame || self.frame_index % interval == 0;
+        let cold_scan = tracked_count == 0 || self.frame_index % interval == 0;
         self.frame_index += 1;
-        let mut budget = self.schedule.max_per_frame;
+        let mut budget = if slots_full { 0 } else { self.schedule.max_per_frame };
         let mut attempts: Vec<usize> = Vec::new();
         for i in 0..n {
             if budget == 0 {
@@ -247,13 +259,20 @@ impl Pipeline {
         }
 
         // Pass 3: run the attempts against one shared feature extraction.
+        // Acquisitions count toward max_tracked as they land, so an exclusive
+        // session never acquires two targets in the same frame.
         self.last_detect_indices = attempts.clone();
         if !attempts.is_empty() {
             let feats = extract_frame_features(frame, &self.detector_config);
+            let mut tracked_now = tracked_count;
             for &i in &attempts {
+                if self.schedule.max_tracked > 0 && tracked_now >= self.schedule.max_tracked {
+                    break;
+                }
                 if let Some(d) = detect_marker_in(&self.markers[i], &feats, &self.detector_config) {
                     self.states[i] = Some(TrackState::new(d.homography, t));
                     self.lost_age[i] = 0;
+                    tracked_now += 1;
                     out[i] = Some(PipelineResult {
                         status: MarkerStatus::Detected,
                         homography: Some(d.homography),

@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] — 2026-08-29
+
+Steadiness release for multi-target sessions, driven by the first production
+integration.
+
+### Added
+
+- **`maxTracked` config option** — cap on simultaneously tracked targets
+  (default unlimited). `maxTracked: 1` gives an exclusive session (MindAR's
+  `maxTrack: 1` equivalent): once a target is acquired, all other detection
+  pauses until it is lost, so exactly one anchor is active at a time and the
+  per-frame cost is pure tracking (~2.5 ms). The right mode for "one photo
+  plays at a time" products.
+
+### Fixed
+
+- **Trembling during camera motion in multi-target sessions.** While a
+  target was tracked, cold-marker scans still ran every 3rd frame; the
+  alternation of ~3 ms tracking frames with ~25 ms scan frames made the
+  measurement cadence uneven, which read as content trembling while the
+  camera moved (still scenes were unaffected). Cold scans now back off to
+  every 10th frame while anything is tracked — and don't run at all when
+  `maxTracked` slots are full — while the acquire phase (nothing tracked)
+  now scans every frame, making first detection faster than 0.2.0. Steady
+  10-target cost drops 13 → 6 ms/frame average (native).
+
 ## [0.2.0] — 2026-08-29
 
 Multi-target release: a session with many markers (an album of photos, a deck
@@ -90,7 +116,8 @@ Initial release.
   format, and an `npx tracear compile` CLI.
 - ~95 KB gzipped including the WASM binary.
 
-[Unreleased]: https://github.com/CagKebabi/TraceAR/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/CagKebabi/TraceAR/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/CagKebabi/TraceAR/releases/tag/v0.2.1
 [0.2.0]: https://github.com/CagKebabi/TraceAR/releases/tag/v0.2.0
 [0.1.2]: https://github.com/CagKebabi/TraceAR/releases/tag/v0.1.2
 [0.1.1]: https://github.com/CagKebabi/TraceAR/releases/tag/v0.1.1

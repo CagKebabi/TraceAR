@@ -144,6 +144,14 @@ impl Engine {
         }
     }
 
+    /// Cap the number of simultaneously tracked markers (0 = unlimited).
+    /// With 1 the session is exclusive: once a target is acquired, no other
+    /// detection runs at all until it is lost — the cheapest and steadiest
+    /// mode for "one target at a time" experiences.
+    pub fn set_max_tracked(&mut self, n: u32) {
+        self.session.pipeline.schedule.max_tracked = n as usize;
+    }
+
     /// Drop all tracking/filter state (e.g. when the camera stops).
     pub fn reset(&mut self) {
         self.session.reset();

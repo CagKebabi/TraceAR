@@ -11,6 +11,8 @@ export interface InitMessage {
   markers: ArrayBuffer[];
   /** Physical width per marker (meters or any unit; poses use the same unit). */
   widths: number[];
+  /** Cap on simultaneously tracked markers (0/undefined = unlimited). */
+  maxTracked?: number;
 }
 
 export interface FrameMessage {
@@ -138,6 +140,9 @@ self.onmessage = async (ev: MessageEvent<InitMessage | FrameMessage>) => {
     if (msg.type === "init") {
       await init();
       engine = new Engine();
+      if (msg.maxTracked && msg.maxTracked > 0) {
+        engine.set_max_tracked(msg.maxTracked);
+      }
       const markerSizes: [number, number][] = [];
       // A target file may hold one marker or a multi-marker pack; widths are
       // consumed in expanded-marker order across all targets.

@@ -29,6 +29,12 @@ export interface TracearConfig {
   targetWidthsMeters?: number[];
   /** Long-side cap for the processed frame, default 640. */
   maxProcessSize?: number;
+  /** Cap on simultaneously tracked targets; 0/undefined = unlimited.
+   * `1` gives an exclusive session (like MindAR's maxTrack:1): once a
+   * target is acquired, all other detection pauses until it is lost —
+   * the cheapest and steadiest mode when only one target should be
+   * active at a time. */
+  maxTracked?: number;
   /** Consecutive detection misses before `targetLost`, default 8. */
   lostAfterMisses?: number;
   /** Extra getUserMedia video constraints (merged over the defaults). */
@@ -192,7 +198,10 @@ export class Tracear {
     // Widths align with EXPANDED marker order (packs may hold several
     // markers); the worker consumes them as targets expand, padding with 1.0.
     const widths = config.targetWidthsMeters ?? [];
-    worker.postMessage({ type: "init", markers, widths }, markers);
+    worker.postMessage(
+      { type: "init", markers, widths, maxTracked: config.maxTracked ?? 0 },
+      markers,
+    );
     const readyMsg = await ready;
     return new Tracear(config, worker, readyMsg.markerSizes);
   }

@@ -24,6 +24,7 @@ the camera yet.
 | `targets` | `(string \| ArrayBuffer \| Uint8Array)[]` | — | Compiled `.tracear` targets: URLs or raw bytes. A file may hold one marker or a [multi-marker pack](/guide/markers#many-targets-one-file-packs); packs expand in place. |
 | `targetWidthsMeters` | `number[]` | `1` per marker | Physical width of each marker (in expanded pack order) — poses come out in the same unit. |
 | `maxProcessSize` | `number` | `640` | Long-side cap for the processed frame. |
+| `maxTracked` | `number` | unlimited | Cap on simultaneously tracked targets. `1` = exclusive session (like MindAR's `maxTrack: 1`): once a target is acquired, all other detection pauses until it is lost — cheapest and steadiest when only one target should be active at a time. |
 | `lostAfterMisses` | `number` | `8` | Consecutive misses before `targetLost`. |
 | `videoConstraints` | `MediaTrackConstraints` | — | Extra `getUserMedia` video constraints, merged over the defaults (environment camera, 1280×720 ideal). |
 
