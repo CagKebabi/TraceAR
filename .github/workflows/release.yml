@@ -1,8 +1,11 @@
 name: Release
 
 # Publishes @tracear/sdk to npm with provenance when a GitHub release is
-# published (tag format: vX.Y.Z). Requires the NPM_TOKEN repository secret —
-# a granular npm automation token with read/write on @tracear/sdk.
+# published (tag format: vX.Y.Z). Auth: npm Trusted Publisher (OIDC) — the
+# package on npmjs.com trusts this repo's release.yml workflow directly, so
+# no token or secret is involved (requires npm >= 11.5, hence the upgrade
+# step). workflow_dispatch runs skip the tag check and publish package.json's
+# current version.
 
 on:
   release:
@@ -47,7 +50,9 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 22
-          registry-url: https://registry.npmjs.org
+
+      - name: Upgrade npm (OIDC trusted publishing needs >= 11.5)
+        run: npm install -g npm@latest
 
       - name: Build WASM
         run: wasm-pack build core/tracear-wasm --release --target web --no-pack --out-dir ../../packages/tracear/src/wasm
@@ -63,5 +68,3 @@ jobs:
 
       - name: Publish to npm
         run: npm publish --workspace @tracear/sdk --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
